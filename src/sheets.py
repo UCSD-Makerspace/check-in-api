@@ -77,7 +77,7 @@ class ActivityRow(BaseModel):
 def append_activity(body: ActivityRow):
     try:
         sheet = get_sheets_client().open_by_url(ACTIVITY_SHEET_URL).worksheet(ACTIVITY_SHEET_TAB)
-        sheet.append_row(body.row)
+        sheet.append_row(body.row, table_range="A1")
         return {"status": "ok"}
     except Exception as e:
         logging.error(f"Failed to append activity: {e}")
