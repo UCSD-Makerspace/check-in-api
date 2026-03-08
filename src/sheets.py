@@ -64,7 +64,7 @@ def _init_db():
                     card_uuid VARCHAR(64) PRIMARY KEY,
                     name VARCHAR(255),
                     timestamp VARCHAR(64),
-                    student_id VARCHAR(32),
+                    student_id VARCHAR(255),
                     email VARCHAR(255)
                 )
             """)
