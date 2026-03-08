@@ -59,22 +59,22 @@ def _init_db():
     conn = get_db()
     try:
         with conn.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS users")
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
+                CREATE TABLE users (
                     card_uuid VARCHAR(64) PRIMARY KEY,
-                    name VARCHAR(255),
-                    timestamp VARCHAR(64),
-                    student_id VARCHAR(255),
-                    email VARCHAR(255)
+                    name TEXT,
+                    timestamp TEXT,
+                    student_id TEXT,
+                    email TEXT
                 )
             """)
+            cur.execute("DROP TABLE IF EXISTS waivers")
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS waivers (
+                CREATE TABLE waivers (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    a_number VARCHAR(32),
-                    email VARCHAR(255),
-                    INDEX (a_number),
-                    INDEX (email)
+                    a_number TEXT,
+                    email TEXT
                 )
             """)
     finally:
