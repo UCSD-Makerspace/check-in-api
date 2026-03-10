@@ -1,38 +1,35 @@
-import os
 import logging
+import os
 from datetime import datetime
 
 import requests
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
 FABMAN_API_URL = "https://fabman.io/api/v1"
-
-router = APIRouter()
-
-
-class MemberRequest(BaseModel):
-    first_name: str
-    last_name: str
-    email: str
-    rfid_tag: str
+DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 
-@router.post("/members", status_code=201)
-def create_member(body: MemberRequest):
-    headers = {"Authorization": f"Bearer {os.environ['FABMAN_API_TOKEN']}"}
+def _headers() -> dict:
+    return {"Authorization": f"Bearer {os.environ['FABMAN_API_TOKEN']}"}
+
+
+def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) -> dict:
+    if DEV_MODE:
+        logging.info(f"[DEV] Skipping Fabman account creation for {first_name} {last_name}")
+        return {"member_id": 0, "package_added": True, "key_assigned": True}
+
+    email = email.lower()
+    today = datetime.now().strftime("%Y-%m-%d")
+    headers = _headers()
     space = int(os.environ["FABMAN_SPACE"])
     account = int(os.environ["FABMAN_ACCOUNT"])
     package = int(os.environ["FABMAN_DIB_PACKAGE"])
-    email = body.email.lower()
-    today = datetime.now().strftime("%Y-%m-%d")
 
     attempt = requests.post(
         f"{FABMAN_API_URL}/members",
         headers=headers,
         json={
-            "firstName": body.first_name,
-            "lastName": body.last_name,
+            "firstName": first_name,
+            "lastName": last_name,
             "emailAddress": email,
             "space": space,
             "account": account,
@@ -43,18 +40,15 @@ def create_member(body: MemberRequest):
     )
 
     if attempt.status_code == 201:
-        logging.info(f"Fabman account created for {body.first_name}")
+        logging.info(f"Fabman account created for {first_name}")
     elif get_existing.ok and get_existing.json():
         logging.info(f"{email} already had an account, using existing")
     else:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Fabman member creation failed: {attempt.status_code}",
-        )
+        raise RuntimeError(f"Fabman member creation failed: {attempt.status_code}")
 
     members = get_existing.json()
     if not members:
-        raise HTTPException(status_code=502, detail="Could not retrieve Fabman member ID")
+        raise RuntimeError("Could not retrieve Fabman member ID")
     member_id = members[0]["id"]
 
     pkg = requests.post(
@@ -65,7 +59,7 @@ def create_member(body: MemberRequest):
     key = requests.post(
         f"{FABMAN_API_URL}/members/{member_id}/key",
         headers=headers,
-        json={"token": body.rfid_tag, "type": "nfca"},
+        json={"token": rfid_tag, "type": "nfca"},
     )
 
     if pkg.status_code != 201:
