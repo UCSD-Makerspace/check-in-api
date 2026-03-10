@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import threading
@@ -5,8 +6,7 @@ import time
 from typing import List, Optional
 
 import gspread
-import pymysql
-import pymysql.cursors
+import redis
 from oauth2client.service_account import ServiceAccountCredentials
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -18,13 +18,12 @@ USER_DB_NAME = os.environ["USER_DB_NAME"]
 USER_DB_TAB = os.environ["USER_DB_TAB"]
 WAIVER_DB_NAME = os.environ["WAIVER_DB_NAME"]
 WAIVER_DB_TAB = os.environ["WAIVER_DB_TAB"]
-DB_HOST = os.environ["DB_HOST"]
-DB_PORT = int(os.environ.get("DB_PORT", "3306"))
-DB_NAME = os.environ["DB_NAME"]
-DB_USER = os.environ["DB_USER"]
-DB_PASSWORD = os.environ["DB_PASSWORD"]
+REDIS_HOST = os.environ.get("REDIS_HOST")
+REDIS_PORT = int(os.environ.get("REDIS_PORT"))
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD")
 
 _sheets_client: Optional[gspread.Client] = None
+_redis_client: Optional[redis.Redis] = None
 
 router = APIRouter()
 
@@ -43,42 +42,16 @@ def get_sheets_client() -> gspread.Client:
     return _sheets_client
 
 
-def get_db() -> pymysql.connections.Connection:
-    return pymysql.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
-    )
-
-
-def _init_db():
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("DROP TABLE IF EXISTS users")
-            cur.execute("""
-                CREATE TABLE users (
-                    card_uuid VARCHAR(64) PRIMARY KEY,
-                    name TEXT,
-                    timestamp TEXT,
-                    student_id TEXT,
-                    email TEXT
-                )
-            """)
-            cur.execute("DROP TABLE IF EXISTS waivers")
-            cur.execute("""
-                CREATE TABLE waivers (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    a_number TEXT,
-                    email TEXT
-                )
-            """)
-    finally:
-        conn.close()
+def get_redis() -> redis.Redis:
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            password=REDIS_PASSWORD,
+            decode_responses=True,
+        )
+    return _redis_client
 
 
 def _refresh_cache():
@@ -90,32 +63,37 @@ def _refresh_cache():
     waivers = get_sheets_client().open(WAIVER_DB_NAME).worksheet(WAIVER_DB_TAB).get_all_records(numericise_ignore=["all"])
     logging.info(f"Fetched {len(waivers)} waiver records")
 
-    logging.info("Writing users to database...")
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM users")
-            for row in users:
-                card_uuid = row.get("Card UUID", "").strip()
-                if not card_uuid:
-                    continue
-                cur.execute(
-                    "REPLACE INTO users (card_uuid, name, timestamp, student_id, email) VALUES (%s, %s, %s, %s, %s)",
-                    (card_uuid, row.get("Name", ""), row.get("Timestamp", ""), row.get("Student ID", ""), row.get("Email Address", "")),
-                )
-            logging.info("Users written")
+    r = get_redis()
+    pipe = r.pipeline()
+    pipe.delete("users", "waiver_anumbers", "waiver_emails")
 
-            logging.info("Writing waivers to database...")
-            cur.execute("DELETE FROM waivers")
-            for row in waivers:
-                a_number = row.get("A_Number", "").strip().lower().lstrip("a")
-                email = row.get("Email", "").strip().lower()
-                cur.execute("INSERT INTO waivers (a_number, email) VALUES (%s, %s)", (a_number, email))
-            logging.info("Waivers written")
-    finally:
-        conn.close()
+    user_count = 0
+    for row in users:
+        card_uuid = row.get("Card UUID", "").strip()
+        if not card_uuid:
+            continue
+        pipe.hset("users", card_uuid, json.dumps({
+            "name": row.get("Name", ""),
+            "timestamp": row.get("Timestamp", ""),
+            "student_id": row.get("Student ID", ""),
+            "email": row.get("Email Address", ""),
+        }))
+        user_count += 1
 
-    logging.info("Cache refreshed")
+    waiver_count = 0
+    for row in waivers:
+        a_number = row.get("A_Number", "").strip().lower().lstrip("a")
+        email = row.get("Email", "").strip().lower()
+        if a_number:
+            pipe.sadd("waiver_anumbers", a_number)
+        if email:
+            pipe.sadd("waiver_emails", email)
+        waiver_count += 1
+
+    logging.info(f"Writing {user_count} users and {waiver_count} waivers to Redis...")
+    pipe.execute()
+    mem = r.info('memory')['used_memory_human']
+    logging.info(f"Cache refreshed (Redis using {mem})")
 
 
 def _refresh_loop():
@@ -128,43 +106,27 @@ def _refresh_loop():
 
 
 def start_cache():
-    _init_db()
     _refresh_cache()
     threading.Thread(target=_refresh_loop, daemon=True).start()
 
 
 @router.get("/users/{uuid}")
 def get_user(uuid: str):
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT name, timestamp, student_id, email FROM users WHERE card_uuid = %s",
-                (uuid,),
-            )
-            row = cur.fetchone()
-    finally:
-        conn.close()
-    if row is None:
+    r = get_redis()
+    data = r.hget("users", uuid)
+    if data is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"Name": row["name"], "Timestamp": row["timestamp"], "Student ID": row["student_id"], "Email Address": row["email"]}
+    d = json.loads(data)
+    return {"Name": d["name"], "Timestamp": d["timestamp"], "Student ID": d["student_id"], "Email Address": d["email"]}
 
 
 @router.get("/waivers/check")
 def check_waiver(pid: str, email: str):
     normalized_pid = pid.strip().lower().lstrip("a")
     normalized_email = email.strip().lower()
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM waivers WHERE a_number = %s OR email = %s",
-                (normalized_pid, normalized_email),
-            )
-            row = cur.fetchone()
-    finally:
-        conn.close()
-    return {"has_waiver": row is not None}
+    r = get_redis()
+    has_waiver = r.sismember("waiver_anumbers", normalized_pid) or r.sismember("waiver_emails", normalized_email)
+    return {"has_waiver": bool(has_waiver)}
 
 
 class UserRow(BaseModel):
