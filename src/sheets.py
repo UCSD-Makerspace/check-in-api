@@ -90,6 +90,7 @@ def _refresh_cache():
     waivers = get_sheets_client().open(WAIVER_DB_NAME).worksheet(WAIVER_DB_TAB).get_all_records(numericise_ignore=["all"])
     logging.info(f"Fetched {len(waivers)} waiver records")
 
+    logging.info("Writing users to database...")
     conn = get_db()
     try:
         with conn.cursor() as cur:
@@ -102,12 +103,15 @@ def _refresh_cache():
                     "REPLACE INTO users (card_uuid, name, timestamp, student_id, email) VALUES (%s, %s, %s, %s, %s)",
                     (card_uuid, row.get("Name", ""), row.get("Timestamp", ""), row.get("Student ID", ""), row.get("Email Address", "")),
                 )
+            logging.info("Users written")
 
+            logging.info("Writing waivers to database...")
             cur.execute("DELETE FROM waivers")
             for row in waivers:
                 a_number = row.get("A_Number", "").strip().lower().lstrip("a")
                 email = row.get("Email", "").strip().lower()
                 cur.execute("INSERT INTO waivers (a_number, email) VALUES (%s, %s)", (a_number, email))
+            logging.info("Waivers written")
     finally:
         conn.close()
 

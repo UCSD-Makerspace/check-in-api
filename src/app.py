@@ -1,13 +1,16 @@
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
-
 from fastapi import FastAPI
+import ucsd_api
+import fabman
+import sheets
 
-from . import ucsd_api, fabman, sheets
+logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     sheets.start_cache()
     yield
 
