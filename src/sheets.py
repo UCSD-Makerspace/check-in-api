@@ -10,6 +10,7 @@ import redis
 from oauth2client.service_account import ServiceAccountCredentials
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from ucsd_api import get_enrollment_terms
 
 GOOGLE_CREDS_PATH = os.environ.get("GOOGLE_CREDENTIALS_PATH")
 ACTIVITY_SHEET_URL = os.environ["ACTIVITY_SHEET_URL"]
@@ -117,7 +118,15 @@ def get_user(uuid: str):
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
     d = json.loads(data)
-    return {"Name": d["name"], "Timestamp": d["timestamp"], "Student ID": d["student_id"], "Email Address": d["email"]}
+    first_enr_trm, last_enr_trm = get_enrollment_terms(d.get("student_id", ""))
+    return {
+        "Name": d["name"],
+        "Timestamp": d["timestamp"],
+        "Student ID": d["student_id"],
+        "Email Address": d["email"],
+        "firstEnrTrm": first_enr_trm,
+        "lastEnrTrm": last_enr_trm,
+    }
 
 
 @router.get("/waivers/check")

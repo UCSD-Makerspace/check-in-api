@@ -58,6 +58,23 @@ def _parse_student(data: dict, pid: str) -> dict:
     }
 
 
+def _fetch_student_by_pid(pid: str) -> Optional[dict]:
+    resp = ucsd_safe_get(
+        f"{UCSD_API_URL}student_contact_info/v1/students/contactinfo_by_pids?studentIds={pid}"
+    )
+    if not resp or not resp.ok or not resp.json():
+        return None
+    return _parse_student(resp.json()[0], pid)
+
+
+def get_enrollment_terms(student_id: str) -> tuple[str, str]:
+    normalized = "A" + student_id.strip().lower().lstrip("a")
+    student = _fetch_student_by_pid(normalized)
+    if student is None:
+        return "", ""
+    return student["first_enr_term"], student["last_enr_term"]
+
+
 @router.get("/students/barcode/{barcode}")
 def student_by_barcode(barcode: str):
     barcode_resp = ucsd_safe_get(
@@ -65,25 +82,17 @@ def student_by_barcode(barcode: str):
     )
     if not barcode_resp:
         raise HTTPException(status_code=502, detail="UCSD API unavailable")
-    if not barcode_resp.ok:
-        raise HTTPException(status_code=404, detail="Student not found")
 
     pid = barcode_resp.json()["studentId"]
-    resp = ucsd_safe_get(
-        f"{UCSD_API_URL}student_contact_info/v1/students/contactinfo_by_pids?studentIds={pid}"
-    )
-    if not resp or not resp.ok:
+    student = _fetch_student_by_pid(pid)
+    if student is None:
         raise HTTPException(status_code=502, detail="UCSD API unavailable")
-    return _parse_student(resp.json()[0], pid)
+    return student
 
 
 @router.get("/students/pid/{pid}")
 def student_by_pid(pid: str):
-    resp = ucsd_safe_get(
-        f"{UCSD_API_URL}student_contact_info/v1/students/contactinfo_by_pids?studentIds={pid}"
-    )
-    if not resp:
-        raise HTTPException(status_code=502, detail="UCSD API unavailable")
-    if not resp.ok or not resp.json():
+    student = _fetch_student_by_pid(pid)
+    if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
-    return _parse_student(resp.json()[0], pid)
+    return student
