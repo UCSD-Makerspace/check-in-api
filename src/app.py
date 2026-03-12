@@ -32,7 +32,8 @@ async def log_timing(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     ms = (time.time() - start) * 1000
-    logging.info(f"[{request.method}] {request.url.path} {response.status_code} {ms:.0f}ms")
+    if request.url.path != "/traffic-light":
+        logging.info(f"[{request.method}] {request.url.path} {response.status_code} {ms:.0f}ms")
     return response
 
 
