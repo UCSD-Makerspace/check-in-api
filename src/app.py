@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 
 from services import cache
-from routes import check_in, accounts
+from routes import check_in, accounts, traffic_light
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,6 +38,7 @@ async def log_timing(request: Request, call_next):
 
 app.include_router(check_in.router)
 app.include_router(accounts.router)
+app.include_router(traffic_light.router)
 
 
 @app.get("/health")
