@@ -1,11 +1,11 @@
 import os
 
 _DUMMY_ENV = {
-    "ACTIVITY_SHEET_URL": "https://dummy",
+    "ACTIVITY_SHEET_ID": "dummy",
     "ACTIVITY_SHEET_TAB": "dummy",
-    "USER_DB_NAME": "dummy",
+    "USER_DB_ID": "dummy",
     "USER_DB_TAB": "dummy",
-    "WAIVER_DB_NAME": "dummy",
+    "WAIVER_DB_ID": "dummy",
     "WAIVER_DB_TAB": "dummy",
     "REDIS_HOST": "localhost",
 }

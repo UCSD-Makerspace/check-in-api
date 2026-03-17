@@ -22,7 +22,7 @@ class AccountRequest(BaseModel):
 def create_account(body: AccountRequest):
     full_name = f"{body.first_name} {body.last_name}"
     timestamp = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
-    row = [full_name, timestamp, body.rfid, body.pid, "", body.email, " ", " "]
+    row = [full_name, timestamp, body.rfid, body.pid, body.email]
 
     try:
         sheets_service.append_user_row(row)
