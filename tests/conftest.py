@@ -3,10 +3,10 @@ import os
 _DUMMY_ENV = {
     "ACTIVITY_SHEET_ID": "dummy",
     "ACTIVITY_SHEET_TAB": "dummy",
-    "USER_DB_ID": "dummy",
-    "USER_DB_TAB": "dummy",
-    "WAIVER_DB_ID": "dummy",
-    "WAIVER_DB_TAB": "dummy",
+    "USER_SHEET_ID": "dummy",
+    "USER_SHEET_TAB": "dummy",
+    "WAIVER_SHEET_ID": "dummy",
+    "WAIVER_SHEET_TAB": "dummy",
     "REDIS_HOST": "localhost",
 }
 for _k, _v in _DUMMY_ENV.items():
