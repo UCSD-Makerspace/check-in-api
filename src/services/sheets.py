@@ -42,6 +42,4 @@ def append_user_row(row: list):
 
 
 def append_activity_row(row: list):
-    sheet = get_client().open_by_key(ACTIVITY_SHEET_ID).worksheet(ACTIVITY_SHEET_TAB)
-    next_row = len(sheet.get_all_values()) + 1
-    sheet.update(f"A{next_row}", [row])
+    get_client().open_by_key(ACTIVITY_SHEET_ID).worksheet(ACTIVITY_SHEET_TAB).append_row(row)
