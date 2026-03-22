@@ -50,6 +50,18 @@ def _parse_student(data: dict, pid: str) -> dict:
     }
 
 
+def fetch_student_by_barcode(barcode: str) -> Optional[dict]:
+    if DEV_MODE:
+        return fetch_student_by_pid("A12345678")
+    resp = safe_get(f"{UCSD_API_URL}student_contact_info/v1/students/{barcode}/student_id")
+    if not resp:
+        return None
+    pid = resp.json().get("studentId")
+    if not pid:
+        return None
+    return fetch_student_by_pid(pid)
+
+
 def fetch_student_by_pid(pid: str) -> Optional[dict]:
     if DEV_MODE:
         return {

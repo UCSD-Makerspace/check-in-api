@@ -1,4 +1,7 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_PST = ZoneInfo("America/Los_Angeles")
 
 from fastapi import APIRouter
 
@@ -13,7 +16,7 @@ def _build_response(d: dict, tag: str) -> dict:
 
     first_enr_trm, last_enr_trm = ucsd.get_enrollment_terms(d["student_id"])
 
-    now = datetime.now()
+    now = datetime.now(_PST)
     cache.get_activity_queue().enqueue([
         now.strftime("%m/%d/%Y %H:%M:%S"),
         int(now.timestamp()),
