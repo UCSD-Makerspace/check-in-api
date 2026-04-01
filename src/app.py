@@ -13,6 +13,17 @@ logging.basicConfig(level=logging.INFO)
 
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
+SILENT_PATHS = frozenset(["/health", "/traffic-light"])
+
+
+class _SilentPathFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        return not any(f" {path} " in msg or f'"{path} ' in msg for path in SILENT_PATHS)
+
+
+logging.getLogger("uvicorn.access").addFilter(_SilentPathFilter())
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -32,7 +43,7 @@ async def log_timing(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     ms = (time.time() - start) * 1000
-    if request.url.path != "/traffic-light":
+    if request.url.path not in SILENT_PATHS:
         logging.info(f"[{request.method}] {request.url.path} {response.status_code} {ms:.0f}ms")
     return response
 
