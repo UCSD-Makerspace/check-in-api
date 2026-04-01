@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from typing import Optional
@@ -63,6 +64,7 @@ def fetch_student_by_barcode(barcode: str) -> Optional[dict]:
 
 
 def fetch_student_by_pid(pid: str) -> Optional[dict]:
+    pid = "A" + pid.strip().upper().lstrip("A")
     if DEV_MODE:
         return {
             "pid": pid,
@@ -72,10 +74,12 @@ def fetch_student_by_pid(pid: str) -> Optional[dict]:
             "first_enr_term": "FA20",
             "last_enr_term": "SP25",
         }
+    logging.info(f"[UCSD] lookup by PID: {pid}")
     resp = safe_get(
         f"{UCSD_API_URL}student_contact_info/v1/students/contactinfo_by_pids?studentIds={pid}"
     )
     if not resp or not resp.json():
+        logging.warning(f"[UCSD] no result for PID: {pid}")
         return None
     return _parse_student(resp.json()[0], pid)
 
