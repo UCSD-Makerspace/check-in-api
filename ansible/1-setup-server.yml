@@ -36,11 +36,32 @@
   vars:
     deploy_dir: "/home/{{ ansible_user }}/check-in-api"
 
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true
+
   tasks:
     - name: Install Docker
       shell: curl -fsSL https://get.docker.com | sh
       args:
         creates: /usr/bin/docker
+
+    - name: Ensure Docker systemd drop-in directory exists
+      file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure Docker to wait for WireGuard before starting
+      copy:
+        dest: /etc/systemd/system/docker.service.d/wireguard-online.conf
+        content: |
+          [Unit]
+          After=wg-quick@wg0.service
+          Wants=wg-quick@wg0.service
+        mode: "0644"
+      notify: Reload systemd
 
     - name: Add {{ ansible_user }} to docker group
       user:
