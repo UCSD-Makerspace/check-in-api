@@ -1,11 +1,33 @@
-- import_playbook: load-secrets.yml
+- name: Deploy check-in-api
+  hosts: api_server
+  become: true
+
+  vars:
+    deploy_dir: "/home/{{ ansible_user }}/check-in-api"
+
+  tasks:
+    - name: Copy docker-compose.yml
+      copy:
+        src: "{{ playbook_dir }}/../docker-compose.yml"
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      register: compose_file
+
+    - name: Pull and restart stack
+      shell: docker compose pull && docker compose up -d
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ ansible_user }}"
+      when: compose_file.changed
 
 - name: Deploy check-in kiosk
   hosts: kiosks
   become: true
 
   vars:
-    deploy_dir: "{{ ansible_env.HOME }}/check-in"
+    deploy_dir: "/home/{{ ansible_user }}/check-in"
 
   tasks:
     - name: Copy docker-compose.yml
@@ -18,7 +40,7 @@
       register: compose_file
 
     - name: Pull and restart stack
-      command: docker compose pull && docker compose up -d
+      shell: docker compose pull && docker compose up -d
       args:
         chdir: "{{ deploy_dir }}"
       become_user: "{{ ansible_user }}"
