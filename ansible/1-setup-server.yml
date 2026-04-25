@@ -84,3 +84,11 @@
         mode: "0644"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
+
+    - name: Daily Docker image cleanup at midnight
+      cron:
+        name: docker image prune
+        minute: "0"
+        hour: "0"
+        job: "docker image prune -f"
+      become_user: "{{ ansible_user }}"
