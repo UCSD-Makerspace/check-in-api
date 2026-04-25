@@ -1,0 +1,163 @@
+- name: Harden SSH on kiosks
+  hosts: kiosks
+  become: true
+
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted
+
+  tasks:
+    - name: Add authorized SSH keys
+      authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', playbook_dir + '/files/ssh-keys.conf') }}"
+        exclusive: false
+
+    - name: Disable SSH password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+      notify: Restart SSH
+
+
+- name: Configure kiosk display and power settings
+  hosts: kiosks
+  become: true
+
+  handlers:
+    - name: Update dconf
+      command: dconf update
+
+  tasks:
+    - name: Ensure dconf directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /etc/dconf/db/local.d
+        - /etc/dconf/profile
+
+    - name: Create dconf user profile
+      copy:
+        dest: /etc/dconf/profile/user
+        mode: "0644"
+        content: |
+          user-db:user
+          system-db:local
+      notify: Update dconf
+
+    - name: Disable sleep and screen lock via dconf
+      copy:
+        dest: /etc/dconf/db/local.d/01-kiosk-power
+        mode: "0644"
+        content: |
+          [org/gnome/desktop/session]
+          idle-delay=uint32 0
+
+          [org/gnome/settings-daemon/plugins/power]
+          sleep-inactive-ac-type='nothing'
+          sleep-inactive-battery-type='nothing'
+
+          [org/gnome/desktop/screensaver]
+          lock-enabled=false
+          lock-delay=uint32 0
+      notify: Update dconf
+
+    - name: Configure GDM automatic login and disable Wayland
+      lineinfile:
+        path: /etc/gdm3/custom.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        insertafter: "\\[daemon\\]"
+      loop:
+        - { regexp: "^#?AutomaticLoginEnable", line: "AutomaticLoginEnable=true" }
+        - { regexp: "^#?AutomaticLogin=", line: "AutomaticLogin={{ ansible_user }}" }
+        - { regexp: "^#?WaylandEnable", line: "WaylandEnable=false" }
+
+    - name: Ensure autostart directory exists
+      file:
+        path: /home/{{ ansible_user }}/.config/autostart
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Allow local X11 connections for Docker containers
+      copy:
+        src: files/xhost-docker.desktop
+        dest: /home/{{ ansible_user }}/.config/autostart/xhost-docker.desktop
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+
+
+- name: Deploy check-in app on kiosks
+  hosts: kiosks
+  become: true
+
+  vars:
+    deploy_dir: "/home/{{ ansible_user }}/check-in"
+
+  tasks:
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - htop
+          - vim
+        state: present
+        update_cache: true
+
+    - name: Install Docker
+      shell: curl -fsSL https://get.docker.com | sh
+      args:
+        creates: /usr/bin/docker
+
+    - name: Add {{ ansible_user }} to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Ensure check-in directory exists
+      file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy docker-compose.yml
+      copy:
+        src: "{{ playbook_dir }}/../../check-in/docker-compose.yml"
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Start check-in stack
+      command: docker compose up -d
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ ansible_user }}"
+
+    - name: Daily Docker image cleanup at midnight
+      cron:
+        name: docker image prune
+        minute: "0"
+        hour: "0"
+        job: "docker image prune -f"
+      become_user: "{{ ansible_user }}"
+
+
+- name: Reboot kiosks
+  hosts: kiosks
+  become: true
+
+  tasks:
+    - name: Reboot
+      reboot:

@@ -1,0 +1,13 @@
+[Interface]
+PrivateKey = {{ wg_private_key }}
+Address = {{ wireguard_ip }}/24
+ListenPort = 51820
+
+{% for kiosk in groups['kiosks'] | default([]) %}
+# {{ kiosk }}
+[Peer]
+PublicKey = {{ hostvars[kiosk]['wg_public_key'] }}
+AllowedIPs = {{ hostvars[kiosk]['wireguard_ip'] }}/32
+
+{% endfor %}
+{{ lookup('file', playbook_dir + '/files/wireguard-peers.conf') }}

@@ -1,0 +1,29 @@
+services:
+  check-in-api:
+    image: ghcr.io/ucsd-makerspace/check-in-api:latest
+    pull_policy: always
+    ports:
+      - "10.8.0.1:8000:8000"
+    env_file: .env
+    volumes:
+      - ./google-sheets-service-account.json:/secrets/google-sheets-service-account.json:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  redis:
+    image: redis:8.4
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  watchtower:
+    image: ghcr.io/nicholas-fedor/watchtower:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --schedule "0 */5 0-5 * * *"
+    # Testing: swap the line above for the line below to check every 30 seconds
+    # command: --interval 30
+    restart: unless-stopped

@@ -1,0 +1,9 @@
+[Interface]
+PrivateKey = {{ wg_private_key }}
+Address = {{ wireguard_ip }}/24
+
+[Peer]
+PublicKey = {{ server_public_key }}
+Endpoint = {{ server_endpoint }}:51820
+AllowedIPs = {{ server_wireguard_ip }}/32
+PersistentKeepalive = 25

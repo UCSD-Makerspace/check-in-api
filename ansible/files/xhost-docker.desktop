@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=X11 Docker Access
+Exec=xhost +local:
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

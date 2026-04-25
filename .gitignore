@@ -7,3 +7,5 @@ __pycache__/
 .env
 google-sheets-service-account.json
 ignore-*
+inventory.ini
+secrets.yml

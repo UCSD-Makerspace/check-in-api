@@ -1,0 +1,65 @@
+- name: Harden SSH on server
+  hosts: api_server
+  become: true
+
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted
+
+  tasks:
+    - name: Add authorized SSH keys
+      authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', playbook_dir + '/files/ssh-keys.conf') }}"
+        exclusive: false
+
+    - name: Install dependencies
+      apt:
+        name: htop
+        state: present
+        update_cache: true
+
+    - name: Disable SSH password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+      notify: Restart SSH
+
+
+- name: Install Docker and prepare deployment directory
+  hosts: api_server
+  become: true
+
+  vars:
+    deploy_dir: "/home/{{ ansible_user }}/check-in-api"
+
+  tasks:
+    - name: Install Docker
+      shell: curl -fsSL https://get.docker.com | sh
+      args:
+        creates: /usr/bin/docker
+
+    - name: Add {{ ansible_user }} to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Ensure deployment directory exists
+      file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy docker-compose.yml to server
+      copy:
+        src: "{{ playbook_dir }}/../docker-compose.yml"
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"

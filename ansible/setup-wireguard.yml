@@ -1,0 +1,143 @@
+- name: Install and key WireGuard on server
+  hosts: api_server
+  become: true
+
+  tasks:
+    - name: Install WireGuard
+      apt:
+        name: wireguard
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/wireguard exists
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: "0700"
+
+    - name: Generate WireGuard keys
+      shell: wg genkey | tee /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
+      args:
+        creates: /etc/wireguard/privatekey
+
+    - name: Lock down private key permissions
+      file:
+        path: /etc/wireguard/privatekey
+        mode: "0600"
+
+    - name: Read server keys
+      slurp:
+        src: "{{ item }}"
+      loop:
+        - /etc/wireguard/privatekey
+        - /etc/wireguard/publickey
+      register: _server_keys
+
+    - name: Store server key facts
+      set_fact:
+        wg_private_key: "{{ _server_keys.results[0].content | b64decode | trim }}"
+        wg_public_key: "{{ _server_keys.results[1].content | b64decode | trim }}"
+
+
+- name: Install and key WireGuard on kiosks
+  hosts: kiosks
+  become: true
+
+  tasks:
+    - name: Install WireGuard
+      apt:
+        name: wireguard
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/wireguard exists
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: "0700"
+
+    - name: Generate WireGuard keys
+      shell: wg genkey | tee /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
+      args:
+        creates: /etc/wireguard/privatekey
+
+    - name: Lock down private key permissions
+      file:
+        path: /etc/wireguard/privatekey
+        mode: "0600"
+
+    - name: Read kiosk keys
+      slurp:
+        src: "{{ item }}"
+      loop:
+        - /etc/wireguard/privatekey
+        - /etc/wireguard/publickey
+      register: _kiosk_keys
+
+    - name: Store kiosk key facts
+      set_fact:
+        wg_private_key: "{{ _kiosk_keys.results[0].content | b64decode | trim }}"
+        wg_public_key: "{{ _kiosk_keys.results[1].content | b64decode | trim }}"
+
+
+- name: Configure WireGuard on server
+  hosts: api_server
+  become: true
+
+  handlers:
+    - name: Restart WireGuard
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+
+  tasks:
+    - name: Write server wg0.conf
+      template:
+        src: templates/wg0-server.conf.j2
+        dest: /etc/wireguard/wg0.conf
+        mode: "0600"
+      notify: Restart WireGuard
+
+    - name: Enable and start WireGuard
+      systemd:
+        name: wg-quick@wg0
+        enabled: true
+        state: started
+
+- name: Configure WireGuard on kiosks
+  hosts: kiosks
+  become: true
+
+  handlers:
+    - name: Restart WireGuard
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+
+  vars:
+    server_public_key: "{{ hostvars[groups['api_server'][0]]['wg_public_key'] }}"
+    server_endpoint: "{{ hostvars[groups['api_server'][0]]['ansible_host'] }}"
+    server_wireguard_ip: "{{ hostvars[groups['api_server'][0]]['wireguard_ip'] }}"
+
+  tasks:
+    - name: Write kiosk wg0.conf
+      template:
+        src: templates/wg0-kiosk.conf.j2
+        dest: /etc/wireguard/wg0.conf
+        mode: "0600"
+      notify: Restart WireGuard
+
+    - name: Enable and start WireGuard
+      systemd:
+        name: wg-quick@wg0
+        enabled: true
+        state: started
+
+
+- name: Print server WireGuard public key
+  hosts: api_server
+
+  tasks:
+    - name: Server public key
+      debug:
+        msg: "Server WireGuard public key: {{ hostvars[inventory_hostname]['wg_public_key'] }}"
