@@ -30,11 +30,13 @@ def get_client() -> gspread.Client:
 
 
 def read_users() -> list[dict]:
-    return get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB).get_all_records(numericise_ignore=["all"], head=2)
+    return (get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB)
+            .get_all_records(numericise_ignore=["all"], head=2))
 
 
 def read_waivers() -> list[dict]:
-    return get_client().open_by_key(WAIVER_SHEET_ID).worksheet(WAIVER_SHEET_TAB).get_all_records(numericise_ignore=["all"])
+    return (get_client().open_by_key(WAIVER_SHEET_ID).worksheet(WAIVER_SHEET_TAB)
+            .get_all_records(numericise_ignore=["all"]))
 
 
 def append_user_row(row: list):

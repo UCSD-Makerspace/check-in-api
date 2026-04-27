@@ -11,7 +11,7 @@ import redis
 from services import sheets as sheets_service
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
-REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379)) # TODO: probably default not needed
+REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))  # TODO: probably default not needed
 REDIS_DB = int(os.environ.get("REDIS_DB", 0))
 
 _redis_client: Optional[redis.Redis] = None

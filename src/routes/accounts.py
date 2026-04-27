@@ -32,7 +32,8 @@ class AccountRequest(BaseModel):
 
 
 def _student_response(student: dict) -> dict:
-    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")), student["emails"][0] if student["emails"] else "")
+    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
+                 student["emails"][0] if student["emails"] else "")
     return {
         "first_name": student["first_name"],
         "last_name": student["last_name"],
@@ -75,7 +76,8 @@ def create_account(body: AccountRequest):
             "emails": [body.email],
         }
 
-    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")), student["emails"][0] if student["emails"] else "")
+    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
+                 student["emails"][0] if student["emails"] else "")
     full_name = f"{student['first_name']} {student['last_name']}"
     timestamp = datetime.now(_PST).strftime("%m/%d/%Y %H:%M:%S")
     row = [full_name, email, timestamp, body.rfid, student["pid"]]
