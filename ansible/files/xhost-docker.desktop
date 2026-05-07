@@ -1,6 +1,5 @@
 [Desktop Entry]
 Type=Application
 Name=X11 Docker Access
-Exec=xhost +local:
+Exec=bash -c 'xhost +local: && docker compose -f /home/makeradmin/check-in/docker-compose.yml restart check-in'
 NoDisplay=true
-X-GNOME-Autostart-enabled=true
