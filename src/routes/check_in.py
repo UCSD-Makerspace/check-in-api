@@ -10,17 +10,17 @@ from services import cache, ucsd
 router = APIRouter()
 
 
-def _build_response(d: dict, tag: str) -> dict:
-    if not cache.has_waiver(d["student_id"], d["email"]):
-        return {"status": "no_waiver", "name": d["name"]}
+def _build_response(user: cache.User, tag: str) -> dict:
+    if not cache.has_waiver(user):
+        return {"status": "no_waiver", "name": user.name}
 
-    first_enr_trm, last_enr_trm = ucsd.get_enrollment_terms(d["student_id"])
+    first_enr_trm, last_enr_trm = ucsd.get_enrollment_terms(user.student_id)
 
     now = datetime.now(_PST)
     cache.get_activity_queue().enqueue([
         now.strftime("%m/%d/%Y %H:%M:%S"),
         int(now.timestamp()),
-        d["name"],
+        user.name,
         tag,
         "User Check-In",
         "",
@@ -30,10 +30,10 @@ def _build_response(d: dict, tag: str) -> dict:
 
     return {
         "status": "ok",
-        "name": d["name"],
-        "student_id": d["student_id"],
-        "timestamp": d["timestamp"],
-        "email": d["email"],
+        "name": user.name,
+        "student_id": user.student_id,
+        "timestamp": user.timestamp,
+        "email": user.email,
         "first_enr_term": first_enr_trm,
         "last_enr_term": last_enr_trm,
     }

@@ -88,7 +88,7 @@ def create_account(body: AccountRequest):
         logging.error(f"Failed to write user row: {e}")
         raise HTTPException(status_code=502, detail="Google Sheets unavailable")
 
-    cache.add_user(body.rfid, student["pid"], full_name, timestamp, email)
+    cache.add_user(cache.User(uuid=body.rfid, student_id=student["pid"], name=full_name, timestamp=timestamp, email=email))
 
     threading.Thread(
         target=_create_fabman_member,

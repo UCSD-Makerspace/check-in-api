@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import logging
 import os
@@ -16,6 +17,15 @@ REDIS_DB = int(os.environ.get("REDIS_DB", 0))
 
 _redis_client: Optional[redis.Redis] = None
 _activity_queue: Optional["ActivityQueue"] = None
+
+
+@dataclasses.dataclass
+class User:
+    email: str
+    name: str
+    timestamp: str
+    student_id: str = ""
+    uuid: str = ""
 
 
 class ActivityQueue:
@@ -77,32 +87,30 @@ def refresh():
     logging.info(f"Fetched {len(waivers)} waiver records")
 
     r = get_redis()
+    r.flushdb()
+
+    add_users([
+        User(
+            uuid=row.get("Card UUID", "").strip(),
+            student_id=row.get("Student ID", ""),
+            name=row.get("Name", ""),
+            timestamp=row.get("Timestamp", ""),
+            email=row.get("Email Address", ""),
+        )
+        for row in users
+        if row.get("Email Address", "").strip()
+    ])
+
     pipe = r.pipeline()
-    pipe.delete("users", "users_by_pid", "waiver_anumbers", "waiver_emails")
-
-    for row in users:
-        card_uuid = row.get("Card UUID", "").strip()
-        if not card_uuid:
-            continue
-        student_id = row.get("Student ID", "").strip().lower().lstrip("a")
-        pipe.hset("users", card_uuid, json.dumps({
-            "name": row.get("Name", ""),
-            "timestamp": row.get("Timestamp", ""),
-            "student_id": row.get("Student ID", ""),
-            "email": row.get("Email Address", ""),
-        }))
-        if student_id:
-            pipe.hset("users_by_pid", student_id, card_uuid)
-
     for row in waivers:
-        a_number = row.get("A_Number", "").strip().lower().lstrip("a")
+        pid = row.get("A_Number", "").strip().lower().lstrip("a")
         email = row.get("Email", "").strip().lower()
-        if a_number:
-            pipe.sadd("waiver_anumbers", a_number)
+        if pid:
+            pipe.sadd("waiver_pids", pid)
         if email:
             pipe.sadd("waiver_emails", email)
-
     pipe.execute()
+
     mem = r.info("memory")["used_memory_human"]
     logging.info(f"Cache refreshed (Redis using {mem})")
 
@@ -123,39 +131,47 @@ def start():
     threading.Thread(target=_refresh_loop, daemon=True).start()
 
 
-def get_user_by_uuid(uuid: str) -> Optional[dict]:
-    data = get_redis().hget("users", uuid)
-    return json.loads(data) if data else None
+def get_user_by_uuid(uuid: str) -> Optional[User]:
+    r = get_redis()
+    email = r.hget("users_by_uuid", uuid)
+    if email is None:
+        return None
+    data = r.hget("users", email)
+    return User(**json.loads(data)) if data else None
 
 
-def get_user_by_pid(pid: str) -> Optional[dict]:
+def get_user_by_pid(pid: str) -> Optional[User]:
     normalized = pid.strip().lower().lstrip("a")
     r = get_redis()
-    uuid = r.hget("users_by_pid", normalized)
-    if uuid is None:
+    email = r.hget("users_by_pid", normalized)
+    if email is None:
         return None
-    data = r.hget("users", uuid)
-    return json.loads(data) if data else None
+    data = r.hget("users", email)
+    return User(**json.loads(data)) if data else None
 
 
-def has_waiver(student_id: str, email: str) -> bool:
-    normalized_pid = student_id.strip().lower().lstrip("a")
-    normalized_email = email.strip().lower()
+def has_waiver(user: User) -> bool:
+    normalized_pid = user.student_id.strip().lower().lstrip("a")
+    normalized_email = user.email.strip().lower()
     r = get_redis()
     return bool(
-        r.sismember("waiver_anumbers", normalized_pid)
+        r.sismember("waiver_pids", normalized_pid)
         or r.sismember("waiver_emails", normalized_email)
     )
 
 
-def add_user(uuid: str, student_id: str, name: str, timestamp: str, email: str):
-    normalized_pid = student_id.strip().lower().lstrip("a")
-    r = get_redis()
-    r.hset("users", uuid, json.dumps({
-        "name": name,
-        "timestamp": timestamp,
-        "student_id": student_id,
-        "email": email,
-    }))
-    if normalized_pid:
-        r.hset("users_by_pid", normalized_pid, uuid)
+def add_users(users: list[User]):
+    pipe = get_redis().pipeline()
+    for user in users:
+        normalized_email = user.email.strip().lower()
+        normalized_pid = user.student_id.strip().lower().lstrip("a")
+        pipe.hset("users", normalized_email, json.dumps(dataclasses.asdict(user)))
+        if user.uuid:
+            pipe.hset("users_by_uuid", user.uuid, normalized_email)
+        if normalized_pid:
+            pipe.hset("users_by_pid", normalized_pid, normalized_email)
+    pipe.execute()
+
+
+def add_user(user: User):
+    add_users([user])
