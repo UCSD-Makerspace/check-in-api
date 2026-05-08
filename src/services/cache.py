@@ -42,7 +42,7 @@ class ActivityQueue:
         now = time.time()
         with self._lock:
             if tag == self._last_tag and now - self._last_time < self._DEDUP_WINDOW:
-                logging.debug(f"Skipping duplicate activity for tag {tag}")
+                logging.debug(f"skipping duplicate activity for tag {tag}")
                 return
             self._last_tag = tag
             self._last_time = now
@@ -56,7 +56,7 @@ class ActivityQueue:
                     sheets_service.append_activity_row(row)
                     break
                 except Exception as e:
-                    logging.error(f"Failed to write activity (attempt {attempt + 1}): {e}")
+                    logging.error(f"failed to write activity (attempt {attempt + 1}): {e}")
                     if attempt < 2:
                         time.sleep(2 ** attempt)
 
@@ -78,13 +78,15 @@ def get_activity_queue() -> ActivityQueue:
 
 
 def refresh():
-    logging.info("Fetching user data from Google Sheets...")
-    users = sheets_service.read_users()
-    logging.info(f"Fetched {len(users)} user records")
+    logging.info("cache refresh starting")
 
-    logging.info("Fetching waiver data from Google Sheets...")
+    logging.info("fetching user data from Google Sheets")
+    users = sheets_service.read_users()
+    logging.info(f"fetched {len(users)} user records")
+
+    logging.info("fetching waiver data from Google Sheets")
     waivers = sheets_service.read_waivers()
-    logging.info(f"Fetched {len(waivers)} waiver records")
+    logging.info(f"fetched {len(waivers)} waiver records")
 
     r = get_redis()
     r.flushdb()
@@ -112,7 +114,7 @@ def refresh():
     pipe.execute()
 
     mem = r.info("memory")["used_memory_human"]
-    logging.info(f"Cache refreshed (Redis using {mem})")
+    logging.info(f"cache refresh complete (Redis using {mem})")
 
 
 def _refresh_loop():
@@ -121,7 +123,7 @@ def _refresh_loop():
         try:
             refresh()
         except Exception as e:
-            logging.error(f"Failed to refresh cache: {e}")
+            logging.error(f"failed to refresh cache: {e}")
 
 
 def start():

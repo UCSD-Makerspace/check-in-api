@@ -85,7 +85,7 @@ def create_account(body: AccountRequest):
     try:
         sheets_service.append_user_row(row)
     except Exception as e:
-        logging.error(f"Failed to write user row: {e}")
+        logging.error(f"failed to write user row: {e}")
         raise HTTPException(status_code=502, detail="Google Sheets unavailable")
 
     cache.add_user(cache.User(uuid=body.rfid, student_id=student["pid"], name=full_name, timestamp=timestamp, email=email))
@@ -103,4 +103,4 @@ def _create_fabman_member(first_name: str, last_name: str, email: str, rfid: str
     try:
         fabman.create_member(first_name, last_name, email, rfid)
     except Exception as e:
-        logging.error(f"Fabman account creation failed: {e}")
+        logging.error(f"fabman account creation failed: {e}")

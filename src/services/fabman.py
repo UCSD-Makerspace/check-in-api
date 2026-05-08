@@ -40,7 +40,7 @@ def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) ->
     )
 
     if attempt.status_code == 201:
-        logging.info(f"Fabman account created for {first_name}")
+        logging.info(f"fabman account created for {first_name}")
     elif get_existing.ok and get_existing.json():
         logging.info(f"{email} already had an account, using existing")
     else:
@@ -63,9 +63,9 @@ def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) ->
     )
 
     if pkg.status_code != 201:
-        logging.warning(f"Package add failed: {pkg.status_code} {pkg.json()}")
+        logging.warning(f"package add failed: {pkg.status_code} {pkg.json()}")
     if key.status_code != 201:
-        logging.warning(f"Key assignment failed: {key.status_code} {key.json()}")
+        logging.warning(f"key assignment failed: {key.status_code} {key.json()}")
 
     return {
         "member_id": member_id,
