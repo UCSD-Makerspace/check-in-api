@@ -5,7 +5,7 @@ _PST = ZoneInfo("America/Los_Angeles")
 
 from fastapi import APIRouter
 
-from services import cache, ucsd
+from services import cache
 
 router = APIRouter()
 
@@ -13,8 +13,6 @@ router = APIRouter()
 def _build_response(user: cache.User, tag: str) -> dict:
     if not cache.has_waiver(user):
         return {"status": "no_waiver", "name": user.name}
-
-    first_enr_trm, last_enr_trm = ucsd.get_enrollment_terms(user.student_id)
 
     now = datetime.now(_PST)
     cache.get_activity_queue().enqueue([
@@ -24,9 +22,11 @@ def _build_response(user: cache.User, tag: str) -> dict:
         tag,
         "User Check-In",
         "",
-        first_enr_trm,
-        last_enr_trm,
+        user.first_enr_term,
+        user.last_enr_term,
     ], tag)
+
+    cache.get_enrollment_queue().enqueue(user)
 
     return {
         "status": "ok",
@@ -34,8 +34,8 @@ def _build_response(user: cache.User, tag: str) -> dict:
         "student_id": user.student_id,
         "timestamp": user.timestamp,
         "email": user.email,
-        "first_enr_term": first_enr_trm,
-        "last_enr_term": last_enr_trm,
+        "first_enr_term": user.first_enr_term,
+        "last_enr_term": user.last_enr_term,
     }
 
 

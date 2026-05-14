@@ -9,7 +9,7 @@ from typing import Optional
 
 import redis
 
-from services import sheets as sheets_service
+from services import sheets as sheets_service, ucsd as ucsd_service, ucsd as ucsd_service
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))  # TODO: probably default not needed
@@ -17,6 +17,7 @@ REDIS_DB = int(os.environ.get("REDIS_DB", 0))
 
 _redis_client: Optional[redis.Redis] = None
 _activity_queue: Optional["ActivityQueue"] = None
+_enrollment_queue: Optional["EnrollmentQueue"] = None
 
 
 @dataclasses.dataclass
@@ -26,6 +27,39 @@ class User:
     timestamp: str
     student_id: str = ""
     uuid: str = ""
+    first_enr_term: str = ""
+    last_enr_term: str = ""
+
+
+class EnrollmentQueue:
+    def __init__(self):
+        self._q: Queue = Queue()
+        self._pending: set = set()
+        self._lock = threading.Lock()
+        threading.Thread(target=self._worker, daemon=True).start()
+
+    def enqueue(self, user: "User"):
+        if not user.student_id:
+            return
+        with self._lock:
+            if user.student_id in self._pending:
+                return
+            self._pending.add(user.student_id)
+        self._q.put(user)
+
+    def _worker(self):
+        while True:
+            user = self._q.get()
+            try:
+                first_enr_trm, last_enr_trm = ucsd_service.get_enrollment_terms(user.student_id)
+                updated = dataclasses.replace(user, first_enr_term=first_enr_trm, last_enr_term=last_enr_trm)
+                add_user(updated)
+                logging.info(f"updated enrollment terms for {user.student_id}: {first_enr_trm}/{last_enr_trm}")
+            except Exception as e:
+                logging.error(f"failed to update enrollment terms for {user.student_id}: {e}")
+            finally:
+                with self._lock:
+                    self._pending.discard(user.student_id)
 
 
 class ActivityQueue:
@@ -71,6 +105,10 @@ def get_redis() -> redis.Redis:
             decode_responses=True,
         )
     return _redis_client
+
+
+def get_enrollment_queue() -> "EnrollmentQueue":
+    return _enrollment_queue
 
 
 def get_activity_queue() -> ActivityQueue:
@@ -127,9 +165,10 @@ def _refresh_loop():
 
 
 def start():
-    global _activity_queue
+    global _activity_queue, _enrollment_queue
     refresh()
     _activity_queue = ActivityQueue()
+    _enrollment_queue = EnrollmentQueue()
     threading.Thread(target=_refresh_loop, daemon=True).start()
 
 
