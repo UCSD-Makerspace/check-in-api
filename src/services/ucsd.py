@@ -31,7 +31,7 @@ def safe_get(url: str) -> Optional[requests.Response]:
     token = get_token()
     start = time.time()
     try:
-        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=3)
+        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=4)
         ms = (time.time() - start) * 1000
         logging.info(f"[UCSD] GET {url} {resp.status_code} {ms:.0f}ms")
         return resp if resp.ok else None
