@@ -1,4 +1,6 @@
+import logging
 import os
+import time
 from typing import Optional
 
 import gspread
@@ -30,18 +32,28 @@ def get_client() -> gspread.Client:
 
 
 def read_users() -> list[dict]:
-    return (get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB)
-            .get_all_records(numericise_ignore=["all"], head=2))
+    start = time.time()
+    result = (get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB)
+              .get_all_records(numericise_ignore=["all"], head=2))
+    logging.info(f"[Sheets] read users ({len(result)} rows) {(time.time() - start) * 1000:.0f}ms")
+    return result
 
 
 def read_waivers() -> list[dict]:
-    return (get_client().open_by_key(WAIVER_SHEET_ID).worksheet(WAIVER_SHEET_TAB)
-            .get_all_records(numericise_ignore=["all"]))
+    start = time.time()
+    result = (get_client().open_by_key(WAIVER_SHEET_ID).worksheet(WAIVER_SHEET_TAB)
+              .get_all_records(numericise_ignore=["all"]))
+    logging.info(f"[Sheets] read waivers ({len(result)} rows) {(time.time() - start) * 1000:.0f}ms")
+    return result
 
 
 def append_user_row(row: list):
+    start = time.time()
     get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB).append_row(row)
+    logging.info(f"[Sheets] append user row {(time.time() - start) * 1000:.0f}ms")
 
 
 def append_activity_row(row: list):
+    start = time.time()
     get_client().open_by_key(ACTIVITY_SHEET_ID).worksheet(ACTIVITY_SHEET_TAB).append_row(row)
+    logging.info(f"[Sheets] append activity row {(time.time() - start) * 1000:.0f}ms")

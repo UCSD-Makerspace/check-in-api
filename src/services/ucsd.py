@@ -27,17 +27,18 @@ def get_token() -> str:
     return _ucsd_token["access_token"]
 
 
-def safe_get(url: str, retries: int = 2) -> Optional[requests.Response]:
+def safe_get(url: str) -> Optional[requests.Response]:
     token = get_token()
-    for _ in range(retries):
-        try:
-            resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=4)
-            if resp.ok:
-                return resp
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
-            pass
-        time.sleep(0.5)
-    return None
+    start = time.time()
+    try:
+        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=3)
+        ms = (time.time() - start) * 1000
+        logging.info(f"[UCSD] GET {url} {resp.status_code} {ms:.0f}ms")
+        return resp if resp.ok else None
+    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+        ms = (time.time() - start) * 1000
+        logging.warning(f"[UCSD] GET {url} failed ({e.__class__.__name__}) {ms:.0f}ms")
+        return None
 
 
 def _parse_student(data: dict, pid: str) -> dict:

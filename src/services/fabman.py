@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from datetime import datetime
 
 import requests
@@ -24,6 +25,7 @@ def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) ->
     account = int(os.environ["FABMAN_ACCOUNT"])
     package = int(os.environ["FABMAN_DIB_PACKAGE"])
 
+    start = time.time()
     attempt = requests.post(
         f"{FABMAN_API_URL}/members",
         headers=headers,
@@ -35,9 +37,13 @@ def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) ->
             "account": account,
         },
     )
+    logging.info(f"[Fabman] POST /members {attempt.status_code} {(time.time() - start) * 1000:.0f}ms")
+
+    start = time.time()
     get_existing = requests.get(
         f"{FABMAN_API_URL}/members", headers=headers, params={"q": email}
     )
+    logging.info(f"[Fabman] GET /members {get_existing.status_code} {(time.time() - start) * 1000:.0f}ms")
 
     if attempt.status_code == 201:
         logging.info(f"fabman account created for {first_name}")
@@ -51,16 +57,21 @@ def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) ->
         raise RuntimeError("Could not retrieve Fabman member ID")
     member_id = members[0]["id"]
 
+    start = time.time()
     pkg = requests.post(
         f"{FABMAN_API_URL}/members/{member_id}/packages",
         headers=headers,
         json={"package": package, "fromDate": today},
     )
+    logging.info(f"[Fabman] POST /members/{member_id}/packages {pkg.status_code} {(time.time() - start) * 1000:.0f}ms")
+
+    start = time.time()
     key = requests.post(
         f"{FABMAN_API_URL}/members/{member_id}/key",
         headers=headers,
         json={"token": rfid_tag, "type": "nfca"},
     )
+    logging.info(f"[Fabman] POST /members/{member_id}/key {key.status_code} {(time.time() - start) * 1000:.0f}ms")
 
     if pkg.status_code != 201:
         logging.warning(f"package add failed: {pkg.status_code} {pkg.json()}")
