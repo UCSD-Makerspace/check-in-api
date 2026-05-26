@@ -9,6 +9,12 @@ from authlib.integrations.requests_client import OAuth2Session
 UCSD_API_URL = os.environ.get("UCSD_API_URL", "")
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
+
+class ExternalApiError(Exception):
+    def __init__(self, api: str, message: str = ""):
+        self.api = api
+        super().__init__(message)
+
 _ucsd_client: Optional[OAuth2Session] = None
 _ucsd_token: Optional[dict] = None
 
@@ -38,7 +44,7 @@ def safe_get(url: str) -> Optional[requests.Response]:
     except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
         ms = (time.time() - start) * 1000
         logging.warning(f"[UCSD] GET {url} failed ({e.__class__.__name__}) {ms:.0f}ms")
-        return None
+        raise ExternalApiError(api="ucsd", message=str(e)) from e
 
 
 def _parse_student(data: dict, pid: str) -> dict:

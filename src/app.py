@@ -5,8 +5,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from services import cache
+from services.ucsd import ExternalApiError
 from routes import check_in, accounts, traffic_light
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +38,11 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(ExternalApiError)
+async def external_api_error_handler(request: Request, exc: ExternalApiError):
+    return JSONResponse(status_code=502, content={"api": exc.api})
 
 
 @app.middleware("http")
