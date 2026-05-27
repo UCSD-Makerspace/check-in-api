@@ -1,6 +1,6 @@
 # Setup
 
-This setup assumes that the server is being installed to a Raspberry Pi computer, and that the kiosks are being installed to Raspberry Pi Keyboards. The scripts and application could be adjusted to work with other setups but would require some modification.
+In order to increase the repeatability of the setup, the entire process is outlined here and 90% of it will be completed by automatic (and at least semi-idempotent) Ansible scripts. This setup assumes that the server is being installed to an x86 computer, and that the kiosks are being installed to Raspberry Pi Keyboards. The scripts and application could be adjusted to work with other setups but would require some modification.
 
 ## Prerequisites (local machine)
 
@@ -12,7 +12,7 @@ This setup assumes that the server is being installed to a Raspberry Pi computer
 
 ### Step 1: Setup Server (Local + Server)
 
-Install **Ubuntu Server 24.04** on the Raspberry Pi using **Raspberry Pi Imager** with the user `makeradmin` and the hostname `makerspace-server`. This should automatically set the server up to be connectable via SSH and do a lot of the configuring that is manual for the client in step 2.
+Install **Ubuntu Server 24.04** on with the user `makeradmin` and the hostname `ms-server`. Ensure the server is connectable via SSH and that sudoing does not require a password (likely all default, unlike for the client in step 2).
 
 ### Step 2: Setup Kiosks (Local + Kiosk)
 
