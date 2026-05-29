@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import logging
 import threading
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
-from typing import Optional
 
 _PST = ZoneInfo("America/Los_Angeles")
 
@@ -16,14 +18,14 @@ router = APIRouter()
 
 class AccountRequest(BaseModel):
     rfid: str
-    barcode: Optional[str] = None
-    pid: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[str] = None
+    barcode: str | None = None
+    pid: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
 
     @model_validator(mode="after")
-    def check_inputs(self):
+    def check_inputs(self) -> AccountRequest:
         has_lookup = self.barcode or self.pid
         has_manual = self.first_name and self.last_name and self.email
         if not has_lookup and not has_manual:
@@ -31,7 +33,7 @@ class AccountRequest(BaseModel):
         return self
 
 
-def _student_response(student: dict) -> dict:
+def _student_response(student: dict[str, Any]) -> dict[str, Any]:
     email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
                  student["emails"][0] if student["emails"] else "")
     return {
@@ -43,7 +45,7 @@ def _student_response(student: dict) -> dict:
 
 
 @router.get("/accounts/lookup/pid/{pid}")
-def lookup_student_by_pid(pid: str):
+def lookup_student_by_pid(pid: str) -> dict[str, Any]:
     student = ucsd.fetch_student_by_pid(pid)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -51,7 +53,7 @@ def lookup_student_by_pid(pid: str):
 
 
 @router.get("/accounts/lookup/barcode/{barcode}")
-def lookup_student_by_barcode(barcode: str):
+def lookup_student_by_barcode(barcode: str) -> dict[str, Any]:
     student = ucsd.fetch_student_by_barcode(barcode)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -59,7 +61,7 @@ def lookup_student_by_barcode(barcode: str):
 
 
 @router.post("/accounts", status_code=201)
-def create_account(body: AccountRequest):
+def create_account(body: AccountRequest) -> dict[str, str]:
     if body.barcode:
         student = ucsd.fetch_student_by_barcode(body.barcode)
         if student is None:
@@ -99,7 +101,7 @@ def create_account(body: AccountRequest):
     return {"status": "ok"}
 
 
-def _create_fabman_member(first_name: str, last_name: str, email: str, rfid: str):
+def _create_fabman_member(first_name: str, last_name: str, email: str, rfid: str) -> None:
     try:
         fabman.create_member(first_name, last_name, email, rfid)
     except Exception as e:

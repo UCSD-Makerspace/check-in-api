@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import logging
 import os
 import time
 from datetime import datetime
+from typing import Any
 
 import requests
 
@@ -9,11 +12,11 @@ FABMAN_API_URL = "https://fabman.io/api/v1"
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 
-def _headers() -> dict:
+def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {os.environ['FABMAN_API_TOKEN']}"}
 
 
-def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) -> dict:
+def create_member(first_name: str, last_name: str, email: str, rfid_tag: str) -> dict[str, Any]:
     if DEV_MODE:
         logging.info(f"[DEV] Skipping Fabman account creation for {first_name} {last_name}")
         return {"member_id": 0, "package_added": True, "key_assigned": True}

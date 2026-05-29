@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 _PST = ZoneInfo("America/Los_Angeles")
@@ -10,7 +13,7 @@ from services import cache
 router = APIRouter()
 
 
-def _build_response(user: cache.User, tag: str) -> dict:
+def _build_response(user: cache.User, tag: str) -> dict[str, Any]:
     if not cache.has_waiver(user):
         return {"status": "no_waiver", "name": user.name}
 
@@ -40,7 +43,7 @@ def _build_response(user: cache.User, tag: str) -> dict:
 
 
 @router.get("/check-in/uuid/{uuid}")
-def checkin_by_uuid(uuid: str):
+def checkin_by_uuid(uuid: str) -> dict[str, Any]:
     d = cache.get_user_by_uuid(uuid)
     if d is None:
         return {"status": "no_account"}
@@ -48,7 +51,7 @@ def checkin_by_uuid(uuid: str):
 
 
 @router.get("/check-in/pid/{pid}")
-def checkin_by_pid(pid: str):
+def checkin_by_pid(pid: str) -> dict[str, Any]:
     d = cache.get_user_by_pid(pid)
     if d is None:
         return {"status": "no_account"}
