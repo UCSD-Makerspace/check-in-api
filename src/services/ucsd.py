@@ -8,6 +8,8 @@ from typing import Any
 import requests
 from authlib.integrations.requests_client import OAuth2Session
 
+from api_models import Student
+
 UCSD_API_URL = os.environ.get("UCSD_API_URL", "")
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
@@ -47,6 +49,17 @@ def safe_get(url: str) -> requests.Response | None:
         ms = (time.time() - start) * 1000
         logging.warning(f"[UCSD] GET {url} failed ({e.__class__.__name__}) {ms:.0f}ms")
         raise ExternalApiError(api="ucsd", message=str(e)) from e
+
+
+def to_student(student: dict[str, Any]) -> Student:
+    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
+                 student["emails"][0] if student["emails"] else "")
+    return Student(
+        first_name=student["first_name"],
+        last_name=student["last_name"],
+        email=email,
+        pid=student["pid"],
+    )
 
 
 def _parse_student(data: dict[str, Any], pid: str) -> dict[str, Any]:

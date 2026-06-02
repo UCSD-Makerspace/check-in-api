@@ -1,1 +1,5 @@
+KIOSK_NAME={{ inventory_hostname }}
+HAS_BARCODE_SCANNER={{ has_barcode_scanner }}
+HAS_TRAFFIC_LIGHT={{ has_traffic_light }}
+CHECK_IN_API_URL=http://{{ hostvars['api-server']['wireguard_ip'] }}:8000
 DISCORD_WEBHOOK_URL={{ discord_webhook_url }}

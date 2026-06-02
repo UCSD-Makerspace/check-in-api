@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import redis
 
+from api_models import Student
 from services import sheets as sheets_service, ucsd as ucsd_service, ucsd as ucsd_service
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
@@ -174,6 +175,13 @@ def start() -> None:
     threading.Thread(target=_refresh_loop, daemon=True).start()
 
 
+def get_user_by_email(email: str) -> User | None:
+    normalized = email.strip().lower()
+    r = get_redis()
+    data = cast(str | None, r.hget("users", normalized))
+    return User(**json.loads(data)) if data else None
+
+
 def get_user_by_uuid(uuid: str) -> User | None:
     r = get_redis()
     email = cast(str | None, r.hget("users_by_uuid", uuid))
@@ -218,3 +226,13 @@ def add_users(users: list[User]) -> None:
 
 def add_user(user: User) -> None:
     add_users([user])
+
+
+def to_student(user: User) -> Student:
+    parts = user.name.split(" ", 1)
+    return Student(
+        first_name=parts[0],
+        last_name=parts[1] if len(parts) > 1 else "",
+        email=user.email,
+        pid=user.student_id,
+    )

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from api_models import HealthResponse
 from services import cache
 from services.ucsd import ExternalApiError
 from routes import check_in, accounts, traffic_light
@@ -66,5 +67,5 @@ app.include_router(traffic_light.router)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+def health() -> HealthResponse:
+    return HealthResponse(status="healthy", timestamp=datetime.now(timezone.utc).isoformat())

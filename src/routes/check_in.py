@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 from zoneinfo import ZoneInfo
 
 _PST = ZoneInfo("America/Los_Angeles")
 
 from fastapi import APIRouter
 
+from api_models import CheckInNoAccount, CheckInNoWaiver, CheckInOk, CheckInRequest, CheckInResponse
 from services import cache
 
 router = APIRouter()
 
 
-def _build_response(user: cache.User, tag: str) -> dict[str, Any]:
+def _build_response(user: cache.User, tag: str) -> CheckInOk | CheckInNoWaiver:
     if not cache.has_waiver(user):
-        return {"status": "no_waiver", "name": user.name}
+        return CheckInNoWaiver(name=user.name)
 
     now = datetime.now(_PST)
     cache.get_activity_queue().enqueue([
@@ -31,28 +31,19 @@ def _build_response(user: cache.User, tag: str) -> dict[str, Any]:
 
     cache.get_enrollment_queue().enqueue(user)
 
-    return {
-        "status": "ok",
-        "name": user.name,
-        "student_id": user.student_id,
-        "timestamp": user.timestamp,
-        "email": user.email,
-        "first_enr_term": user.first_enr_term,
-        "last_enr_term": user.last_enr_term,
-    }
+    return CheckInOk(
+        name=user.name,
+        student_id=user.student_id,
+        timestamp=user.timestamp,
+        email=user.email,
+        first_enr_term=user.first_enr_term,
+        last_enr_term=user.last_enr_term,
+    )
 
 
-@router.get("/check-in/uuid/{uuid}")
-def checkin_by_uuid(uuid: str) -> dict[str, Any]:
-    d = cache.get_user_by_uuid(uuid)
-    if d is None:
-        return {"status": "no_account"}
-    return _build_response(d, uuid)
-
-
-@router.get("/check-in/pid/{pid}")
-def checkin_by_pid(pid: str) -> dict[str, Any]:
-    d = cache.get_user_by_pid(pid)
-    if d is None:
-        return {"status": "no_account"}
-    return _build_response(d, "No ID")
+@router.post("/check-in")
+def checkin(body: CheckInRequest) -> CheckInResponse:
+    user = cache.get_user_by_email(body.email)
+    if user is None:
+        return CheckInNoAccount()
+    return _build_response(user, body.email)
