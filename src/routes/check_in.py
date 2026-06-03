@@ -13,7 +13,11 @@ from services import cache
 router = APIRouter()
 
 
-def _build_response(user: cache.User, tag: str) -> CheckInOk | CheckInNoWaiver:
+@router.post("/check-in")
+def checkin(body: CheckInRequest) -> CheckInResponse:
+    user = cache.get_user_by_email(body.email)
+    if user is None:
+        return CheckInNoAccount()
     if not cache.has_waiver(user):
         return CheckInNoWaiver(name=user.name)
 
@@ -22,12 +26,12 @@ def _build_response(user: cache.User, tag: str) -> CheckInOk | CheckInNoWaiver:
         now.strftime("%m/%d/%Y %H:%M:%S"),
         int(now.timestamp()),
         user.name,
-        tag,
+        body.email,
         "User Check-In",
         "",
         user.first_enr_term,
         user.last_enr_term,
-    ], tag)
+    ], body.email)
 
     cache.get_enrollment_queue().enqueue(user)
 
@@ -39,11 +43,3 @@ def _build_response(user: cache.User, tag: str) -> CheckInOk | CheckInNoWaiver:
         first_enr_term=user.first_enr_term,
         last_enr_term=user.last_enr_term,
     )
-
-
-@router.post("/check-in")
-def checkin(body: CheckInRequest) -> CheckInResponse:
-    user = cache.get_user_by_email(body.email)
-    if user is None:
-        return CheckInNoAccount()
-    return _build_response(user, body.email)
