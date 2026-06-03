@@ -1,6 +1,7 @@
 fastapi==0.135.1
 uvicorn[standard]==0.42.0
 requests==2.32.5
+types-requests
 authlib==1.6.9
 gspread==6.2.1
 oauth2client==4.1.3
