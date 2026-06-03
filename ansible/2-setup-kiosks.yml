@@ -43,28 +43,30 @@
 
     - name: Create dconf user profile
       copy:
+        src: files/dconf/profile-user
         dest: /etc/dconf/profile/user
         mode: "0644"
-        content: |
-          user-db:user
-          system-db:local
       notify: Update dconf
 
     - name: Disable sleep and screen lock via dconf
       copy:
+        src: files/dconf/01-kiosk-power
         dest: /etc/dconf/db/local.d/01-kiosk-power
         mode: "0644"
-        content: |
-          [org/gnome/desktop/session]
-          idle-delay=uint32 0
+      notify: Update dconf
 
-          [org/gnome/settings-daemon/plugins/power]
-          sleep-inactive-ac-type='nothing'
-          sleep-inactive-battery-type='nothing'
+    - name: Install Block Caribou extension
+      copy:
+        src: "files/block-caribou-36/"
+        dest: /usr/share/gnome-shell/extensions/block-caribou-36@lxylxy123456.ercli.dev/
+        mode: "0644"
+        directory_mode: "0755"
 
-          [org/gnome/desktop/screensaver]
-          lock-enabled=false
-          lock-delay=uint32 0
+    - name: Enable Block Caribou extension via dconf
+      copy:
+        src: files/dconf/02-kiosk-extensions
+        dest: /etc/dconf/db/local.d/02-kiosk-extensions
+        mode: "0644"
       notify: Update dconf
 
     - name: Configure GDM automatic login and disable Wayland

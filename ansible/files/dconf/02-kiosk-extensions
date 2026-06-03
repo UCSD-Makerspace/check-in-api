@@ -1,0 +1,3 @@
+[org/gnome/shell]
+disable-user-extensions=false
+enabled-extensions=['block-caribou-36@lxylxy123456.ercli.dev']

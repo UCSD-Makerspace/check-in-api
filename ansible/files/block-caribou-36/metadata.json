@@ -1,0 +1,17 @@
+{
+  "description": "Blocks caribou (the on screen keyboard) from popping up when you use a touchscreen, even if it's disabled in the accessibility services menu. Continuation of keringar's work. Vendored from https://github.com/lxylxy123456/cariboublocker (GNOME 45+ ESM build); shell-version extended to cover 46-48.",
+  "name": "Block Caribou 36",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48"
+  ],
+  "url": "https://github.com/lxylxy123456/cariboublocker",
+  "uuid": "block-caribou-36@lxylxy123456.ercli.dev",
+  "version": 11,
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ]
+}
