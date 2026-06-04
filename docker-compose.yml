@@ -1,6 +1,6 @@
 services:
   check-in-api:
-    image: ghcr.io/ucsd-makerspace/check-in-api:latest
+    image: ghcr.io/ucsd-makerspace/check-in-api-dev:latest
     pull_policy: always
     ports:
       - "10.8.0.1:8000:8000"
@@ -21,6 +21,8 @@ services:
 
   watchtower:
     image: ghcr.io/nicholas-fedor/watchtower:latest
+    environment:
+      - TZ=America/Los_Angeles
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     # Testing: check every 30 seconds
