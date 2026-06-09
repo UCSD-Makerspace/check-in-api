@@ -26,8 +26,7 @@ Install **Ubuntu Desktop 24.04** on the Pi Keyboard using **Raspberry Pi Imager*
 
 #### Connect to Wi-Fi
 
-[//]: # (TODO: switch to fabman wifi)
-Connect to **UCSD-DEVICE** with password `mkrspace`.
+Connect to **fabmans** with the correct password (intentionally omitted).
 
 #### Enable SSH
 
@@ -48,15 +47,19 @@ ssh-copy-id makeradmin@<kiosk_ip>
 
 ### Step 3: Configure Ansible Inventory (Local)
 
-Copy `inventory.example.ini` → `inventory.ini` and fill out values.
+Copy `inventory.example.yml` → `inventory.yml` and fill out values.
 
 ### Step 4: Ansible Ping (Local)
 
-Verify Ansible can reach everything before running any playbooks:
+Verify Ansible can reach everything before running any playbooks using the following command (**all ansible commands should be run from this repo's root directory**):
 
 ```bash
-ansible -i inventory.ini all -m ping
+ansible all -m ping
 ```
+
+Note: Ansible will be unable to ping any server which you have not SSH'ed into at least once first to confirm the fingerprint, make sure you have done this.
+
+
 
 ### Step 5: Run unattended-upgrade (Server + Kiosk)
 
