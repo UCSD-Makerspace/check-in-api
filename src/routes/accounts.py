@@ -1,86 +1,62 @@
+from __future__ import annotations
+
 import logging
 import threading
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
-from typing import Optional
 
 _PST = ZoneInfo("America/Los_Angeles")
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, model_validator
 
+from api_models import AccountRequest, CreateAccountResponse, StudentResponse
 from services import cache, fabman, sheets as sheets_service, ucsd
 
 router = APIRouter()
 
 
-class AccountRequest(BaseModel):
-    rfid: str
-    barcode: Optional[str] = None
-    pid: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[str] = None
-
-    @model_validator(mode="after")
-    def check_inputs(self):
-        has_lookup = self.barcode or self.pid
-        has_manual = self.first_name and self.last_name and self.email
-        if not has_lookup and not has_manual:
-            raise ValueError("Either barcode, pid, or first/last/email must be provided")
-        return self
 
 
-def _student_response(student: dict) -> dict:
-    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
-                 student["emails"][0] if student["emails"] else "")
-    return {
-        "first_name": student["first_name"],
-        "last_name": student["last_name"],
-        "email": email,
-        "pid": student["pid"],
-    }
+@router.get("/accounts/rfid/{uuid}")
+def get_account_by_rfid(uuid: str) -> StudentResponse:
+    user = cache.get_user_by_uuid(uuid)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return StudentResponse(student=cache.to_student(user))
 
 
-@router.get("/accounts/lookup/pid/{pid}")
-def lookup_student_by_pid(pid: str):
+@router.get("/accounts/pid/{pid}")
+def get_account_by_pid(pid: str) -> StudentResponse:
+    user = cache.get_user_by_pid(pid)
+    if user is not None:
+        return StudentResponse(student=cache.to_student(user))
     student = ucsd.fetch_student_by_pid(pid)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
-    return _student_response(student)
+    return StudentResponse(student=ucsd.to_student(student))
 
 
-@router.get("/accounts/lookup/barcode/{barcode}")
-def lookup_student_by_barcode(barcode: str):
+@router.get("/accounts/barcode/{barcode}")
+def get_account_by_barcode(barcode: str) -> StudentResponse:
     student = ucsd.fetch_student_by_barcode(barcode)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
-    return _student_response(student)
+    user = cache.get_user_by_pid(student["pid"])
+    if user is not None:
+        return StudentResponse(student=cache.to_student(user))
+    return StudentResponse(student=ucsd.to_student(student))
 
 
 @router.post("/accounts", status_code=201)
-def create_account(body: AccountRequest):
-    if body.barcode:
-        student = ucsd.fetch_student_by_barcode(body.barcode)
-        if student is None:
-            raise HTTPException(status_code=404, detail="Student not found")
-    elif body.pid:
-        student = ucsd.fetch_student_by_pid(body.pid)
-        if student is None:
-            raise HTTPException(status_code=404, detail="Student not found")
-    else:
-        student = {
-            "pid": "",
-            "first_name": body.first_name,
-            "last_name": body.last_name,
-            "emails": [body.email],
-        }
-
-    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
-                 student["emails"][0] if student["emails"] else "")
-    full_name = f"{student['first_name']} {student['last_name']}"
+def create_account(body: AccountRequest) -> CreateAccountResponse:
+    first_name = (body.first_name or "").strip()
+    last_name = (body.last_name or "").strip()
+    email = (body.email or "").strip().lower()
+    pid = (body.pid or "").strip().upper()
+    full_name = f"{first_name} {last_name}".strip()
     timestamp = datetime.now(_PST).strftime("%m/%d/%Y %H:%M:%S")
-    row = [full_name, email, timestamp, body.rfid, student["pid"]]
+    row = [full_name, email, timestamp, body.rfid, pid]
 
     try:
         sheets_service.append_user_row(row)
@@ -88,18 +64,18 @@ def create_account(body: AccountRequest):
         logging.error(f"failed to write user row: {e}")
         raise HTTPException(status_code=502, detail="Google Sheets unavailable")
 
-    cache.add_user(cache.User(uuid=body.rfid, student_id=student["pid"], name=full_name, timestamp=timestamp, email=email))
+    cache.add_user(cache.User(uuid=body.rfid, student_id=pid, name=full_name, timestamp=timestamp, email=email))
 
     threading.Thread(
         target=_create_fabman_member,
-        args=(student["first_name"], student["last_name"], email, body.rfid),
+        args=(first_name, last_name, email, body.rfid),
         daemon=True,
     ).start()
 
-    return {"status": "ok"}
+    return CreateAccountResponse(status="ok")
 
 
-def _create_fabman_member(first_name: str, last_name: str, email: str, rfid: str):
+def _create_fabman_member(first_name: str, last_name: str, email: str, rfid: str) -> None:
     try:
         fabman.create_member(first_name, last_name, email, rfid)
     except Exception as e:

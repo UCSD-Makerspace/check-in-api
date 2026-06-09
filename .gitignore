@@ -8,4 +8,5 @@ __pycache__/
 google-sheets-service-account.json
 ignore-*
 inventory.ini
+inventory.yml
 secrets.yml

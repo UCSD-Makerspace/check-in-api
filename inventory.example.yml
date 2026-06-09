@@ -1,0 +1,23 @@
+all:
+  children:
+    api_server:
+      hosts:
+        api-server:
+          ansible_host: <server_ip>
+          ansible_user: <server_username>
+          wireguard_ip: 10.8.0.1
+
+    kiosks:
+      hosts:
+        ms-kiosk-1:
+          ansible_host: <kiosk_1_ip>
+          ansible_user: <kiosk_username>
+          wireguard_ip: 10.8.0.101
+          has_barcode_scanner: true
+          has_traffic_light: true
+        ms-kiosk-2:
+          ansible_host: <kiosk_2_ip>
+          ansible_user: <kiosk_username>
+          wireguard_ip: 10.8.0.102
+          has_barcode_scanner: false
+          has_traffic_light: false

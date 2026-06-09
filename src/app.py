@@ -1,12 +1,18 @@
+from __future__ import annotations
+
 import logging
 import os
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
+from api_models import HealthResponse
 from services import cache
 from services.ucsd import ExternalApiError
 from routes import check_in, accounts, traffic_light
@@ -19,7 +25,7 @@ SILENT_PATHS = frozenset(["/health", "/traffic-light"])
 
 
 class _SilentPathFilter(logging.Filter):
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
         return not any(f" {path} " in msg or f'"{path} ' in msg for path in SILENT_PATHS)
 
@@ -28,7 +34,7 @@ logging.getLogger("uvicorn.access").addFilter(_SilentPathFilter())
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     if DEV_MODE:
         logging.warning("=" * 60)
         logging.warning("  DEV MODE — UCSD and Fabman APIs returning dummy data")
@@ -41,12 +47,12 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.exception_handler(ExternalApiError)
-async def external_api_error_handler(request: Request, exc: ExternalApiError):
+async def external_api_error_handler(request: Request, exc: ExternalApiError) -> JSONResponse:
     return JSONResponse(status_code=502, content={"api": exc.api})
 
 
 @app.middleware("http")
-async def log_timing(request: Request, call_next):
+async def log_timing(request: Request, call_next: RequestResponseEndpoint) -> Response:
     start = time.time()
     response = await call_next(request)
     ms = (time.time() - start) * 1000
@@ -61,5 +67,5 @@ app.include_router(traffic_light.router)
 
 
 @app.get("/health")
-def health():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+def health() -> HealthResponse:
+    return HealthResponse(status="healthy", timestamp=datetime.now(timezone.utc).isoformat())

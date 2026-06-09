@@ -1,22 +1,26 @@
+from __future__ import annotations
+
 import logging
 import os
 import time
-from typing import Optional
+from typing import Any
 
 import requests
 from authlib.integrations.requests_client import OAuth2Session
+
+from api_models import Student
 
 UCSD_API_URL = os.environ.get("UCSD_API_URL", "")
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 
 class ExternalApiError(Exception):
-    def __init__(self, api: str, message: str = ""):
+    def __init__(self, api: str, message: str = "") -> None:
         self.api = api
         super().__init__(message)
 
-_ucsd_client: Optional[OAuth2Session] = None
-_ucsd_token: Optional[dict] = None
+_ucsd_client: OAuth2Session | None = None
+_ucsd_token: dict[str, Any] | None = None
 
 
 def get_token() -> str:
@@ -28,12 +32,12 @@ def get_token() -> str:
             token_url=UCSD_API_URL + "token",
         )
         _ucsd_token = _ucsd_client.fetch_token(UCSD_API_URL + "token", grant_type="client_credentials")
-    elif _ucsd_token["expires_at"] < time.time() + 60:
+    elif _ucsd_token["expires_at"] < time.time() + 60:  # type: ignore[index]
         _ucsd_token = _ucsd_client.fetch_token(UCSD_API_URL + "token", grant_type="client_credentials")
-    return _ucsd_token["access_token"]
+    return _ucsd_token["access_token"]  # type: ignore[index, no-any-return]
 
 
-def safe_get(url: str) -> Optional[requests.Response]:
+def safe_get(url: str) -> requests.Response | None:
     token = get_token()
     start = time.time()
     try:
@@ -47,7 +51,18 @@ def safe_get(url: str) -> Optional[requests.Response]:
         raise ExternalApiError(api="ucsd", message=str(e)) from e
 
 
-def _parse_student(data: dict, pid: str) -> dict:
+def to_student(student: dict[str, Any]) -> Student:
+    email = next((e for e in student["emails"] if e.endswith("@ucsd.edu")),
+                 student["emails"][0] if student["emails"] else "")
+    return Student(
+        first_name=student["first_name"],
+        last_name=student["last_name"],
+        email=email,
+        pid=student["pid"],
+    )
+
+
+def _parse_student(data: dict[str, Any], pid: str) -> dict[str, Any]:
     return {
         "pid": pid,
         "first_name": data["name"]["firstName"],
@@ -58,7 +73,7 @@ def _parse_student(data: dict, pid: str) -> dict:
     }
 
 
-def fetch_student_by_barcode(barcode: str) -> Optional[dict]:
+def fetch_student_by_barcode(barcode: str) -> dict[str, Any] | None:
     if DEV_MODE:
         return fetch_student_by_pid("A12345678")
     resp = safe_get(f"{UCSD_API_URL}student_contact_info/v1/students/{barcode}/student_id")
@@ -70,7 +85,7 @@ def fetch_student_by_barcode(barcode: str) -> Optional[dict]:
     return fetch_student_by_pid(pid)
 
 
-def fetch_student_by_pid(pid: str) -> Optional[dict]:
+def fetch_student_by_pid(pid: str) -> dict[str, Any] | None:
     pid = "A" + pid.strip().upper().lstrip("A")
     if DEV_MODE:
         return {

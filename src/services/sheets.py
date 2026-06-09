@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import logging
 import os
 import time
-from typing import Optional
+from typing import Any
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -14,7 +16,7 @@ USER_SHEET_TAB = os.environ["USER_SHEET_TAB"]
 WAIVER_SHEET_ID = os.environ["WAIVER_SHEET_ID"]
 WAIVER_SHEET_TAB = os.environ["WAIVER_SHEET_TAB"]
 
-_client: Optional[gspread.Client] = None
+_client: gspread.Client | None = None
 
 
 def get_client() -> gspread.Client:
@@ -31,7 +33,7 @@ def get_client() -> gspread.Client:
     return _client
 
 
-def read_users() -> list[dict]:
+def read_users() -> list[dict[str, Any]]:
     start = time.time()
     result = (get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB)
               .get_all_records(numericise_ignore=["all"], head=2))
@@ -39,7 +41,7 @@ def read_users() -> list[dict]:
     return result
 
 
-def read_waivers() -> list[dict]:
+def read_waivers() -> list[dict[str, Any]]:
     start = time.time()
     result = (get_client().open_by_key(WAIVER_SHEET_ID).worksheet(WAIVER_SHEET_TAB)
               .get_all_records(numericise_ignore=["all"]))
@@ -47,13 +49,13 @@ def read_waivers() -> list[dict]:
     return result
 
 
-def append_user_row(row: list):
+def append_user_row(row: list[Any]) -> None:
     start = time.time()
     get_client().open_by_key(USER_SHEET_ID).worksheet(USER_SHEET_TAB).append_row(row)
     logging.info(f"[Sheets] append user row {(time.time() - start) * 1000:.0f}ms")
 
 
-def append_activity_row(row: list):
+def append_activity_row(row: list[Any]) -> None:
     start = time.time()
     get_client().open_by_key(ACTIVITY_SHEET_ID).worksheet(ACTIVITY_SHEET_TAB).append_row(row)
     logging.info(f"[Sheets] append activity row {(time.time() - start) * 1000:.0f}ms")

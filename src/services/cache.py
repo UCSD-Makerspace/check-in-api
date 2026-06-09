@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import json
 import logging
@@ -5,19 +7,20 @@ import os
 import threading
 import time
 from queue import Queue
-from typing import Optional
+from typing import Any, cast
 
 import redis
 
+from api_models import Student
 from services import sheets as sheets_service, ucsd as ucsd_service, ucsd as ucsd_service
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))  # TODO: probably default not needed
 REDIS_DB = int(os.environ.get("REDIS_DB", 0))
 
-_redis_client: Optional[redis.Redis] = None
-_activity_queue: Optional["ActivityQueue"] = None
-_enrollment_queue: Optional["EnrollmentQueue"] = None
+_redis_client: redis.Redis | None = None
+_activity_queue: ActivityQueue | None = None
+_enrollment_queue: EnrollmentQueue | None = None
 
 
 @dataclasses.dataclass
@@ -32,13 +35,13 @@ class User:
 
 
 class EnrollmentQueue:
-    def __init__(self):
-        self._q: Queue = Queue()
-        self._pending: set = set()
+    def __init__(self) -> None:
+        self._q: Queue[User] = Queue()
+        self._pending: set[str] = set()
         self._lock = threading.Lock()
         threading.Thread(target=self._worker, daemon=True).start()
 
-    def enqueue(self, user: "User"):
+    def enqueue(self, user: User) -> None:
         if not user.student_id:
             return
         with self._lock:
@@ -47,7 +50,7 @@ class EnrollmentQueue:
             self._pending.add(user.student_id)
         self._q.put(user)
 
-    def _worker(self):
+    def _worker(self) -> None:
         while True:
             user = self._q.get()
             try:
@@ -65,14 +68,14 @@ class EnrollmentQueue:
 class ActivityQueue:
     _DEDUP_WINDOW = 5
 
-    def __init__(self):
-        self._q: Queue = Queue()
-        self._last_tag: Optional[str] = None
+    def __init__(self) -> None:
+        self._q: Queue[list[Any]] = Queue()
+        self._last_tag: str | None = None
         self._last_time: float = 0
         self._lock = threading.Lock()
         threading.Thread(target=self._writer, daemon=True).start()
 
-    def enqueue(self, row: list, tag: str):
+    def enqueue(self, row: list[Any], tag: str) -> None:
         now = time.time()
         with self._lock:
             if tag == self._last_tag and now - self._last_time < self._DEDUP_WINDOW:
@@ -82,7 +85,7 @@ class ActivityQueue:
             self._last_time = now
         self._q.put(row)
 
-    def _writer(self):
+    def _writer(self) -> None:
         while True:
             row = self._q.get()
             for attempt in range(3):
@@ -99,7 +102,7 @@ def get_redis() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
         _redis_client = redis.Redis(
-            host=REDIS_HOST,
+            host=REDIS_HOST,  # type: ignore[arg-type]
             port=REDIS_PORT,
             db=REDIS_DB,
             decode_responses=True,
@@ -107,15 +110,15 @@ def get_redis() -> redis.Redis:
     return _redis_client
 
 
-def get_enrollment_queue() -> "EnrollmentQueue":
-    return _enrollment_queue
+def get_enrollment_queue() -> EnrollmentQueue:
+    return _enrollment_queue  # type: ignore[return-value]
 
 
 def get_activity_queue() -> ActivityQueue:
-    return _activity_queue
+    return _activity_queue  # type: ignore[return-value]
 
 
-def refresh():
+def refresh() -> None:
     logging.info("cache refresh starting")
 
     logging.info("fetching user data from Google Sheets")
@@ -151,11 +154,11 @@ def refresh():
             pipe.sadd("waiver_emails", email)
     pipe.execute()
 
-    mem = r.info("memory")["used_memory_human"]
+    mem = cast(dict[str, Any], r.info("memory"))["used_memory_human"]
     logging.info(f"cache refresh complete (Redis using {mem})")
 
 
-def _refresh_loop():
+def _refresh_loop() -> None:
     while True:
         time.sleep(3600)
         try:
@@ -164,7 +167,7 @@ def _refresh_loop():
             logging.error(f"failed to refresh cache: {e}")
 
 
-def start():
+def start() -> None:
     global _activity_queue, _enrollment_queue
     refresh()
     _activity_queue = ActivityQueue()
@@ -172,22 +175,29 @@ def start():
     threading.Thread(target=_refresh_loop, daemon=True).start()
 
 
-def get_user_by_uuid(uuid: str) -> Optional[User]:
+def get_user_by_email(email: str) -> User | None:
+    normalized = email.strip().lower()
     r = get_redis()
-    email = r.hget("users_by_uuid", uuid)
-    if email is None:
-        return None
-    data = r.hget("users", email)
+    data = cast(str | None, r.hget("users", normalized))
     return User(**json.loads(data)) if data else None
 
 
-def get_user_by_pid(pid: str) -> Optional[User]:
-    normalized = pid.strip().lower().lstrip("a")
+def get_user_by_uuid(uuid: str) -> User | None:
     r = get_redis()
-    email = r.hget("users_by_pid", normalized)
+    email = cast(str | None, r.hget("users_by_uuid", uuid))
     if email is None:
         return None
-    data = r.hget("users", email)
+    data = cast(str | None, r.hget("users", email))
+    return User(**json.loads(data)) if data else None
+
+
+def get_user_by_pid(pid: str) -> User | None:
+    normalized = pid.strip().lower().lstrip("a")
+    r = get_redis()
+    email = cast(str | None, r.hget("users_by_pid", normalized))
+    if email is None:
+        return None
+    data = cast(str | None, r.hget("users", email))
     return User(**json.loads(data)) if data else None
 
 
@@ -201,7 +211,7 @@ def has_waiver(user: User) -> bool:
     )
 
 
-def add_users(users: list[User]):
+def add_users(users: list[User]) -> None:
     pipe = get_redis().pipeline()
     for user in users:
         normalized_email = user.email.strip().lower()
@@ -214,5 +224,15 @@ def add_users(users: list[User]):
     pipe.execute()
 
 
-def add_user(user: User):
+def add_user(user: User) -> None:
     add_users([user])
+
+
+def to_student(user: User) -> Student:
+    parts = user.name.split(" ", 1)
+    return Student(
+        first_name=parts[0],
+        last_name=parts[1] if len(parts) > 1 else "",
+        email=user.email,
+        pid=user.student_id,
+    )
