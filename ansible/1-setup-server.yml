@@ -79,7 +79,7 @@
 
     - name: Copy docker-compose.yml to server
       copy:
-        src: "{{ playbook_dir }}/../docker-compose.yml"
+        src: files/docker-compose-api.yml
         dest: "{{ deploy_dir }}/docker-compose.yml"
         mode: "0644"
         owner: "{{ ansible_user }}"

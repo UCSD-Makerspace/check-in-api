@@ -135,7 +135,7 @@
 
     - name: Copy docker-compose.yml
       copy:
-        src: "{{ playbook_dir }}/../../check-in/docker-compose.yml"
+        src: files/docker-compose-kiosk.yml
         dest: "{{ deploy_dir }}/docker-compose.yml"
         mode: "0644"
         owner: "{{ ansible_user }}"

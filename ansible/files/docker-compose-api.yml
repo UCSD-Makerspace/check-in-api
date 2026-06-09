@@ -1,6 +1,6 @@
 services:
   check-in-api:
-    image: ghcr.io/ucsd-makerspace/check-in-api-dev:latest
+    image: ghcr.io/ucsd-makerspace/check-in-api:latest
     pull_policy: always
     ports:
       - "10.8.0.1:8000:8000"
