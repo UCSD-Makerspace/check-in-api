@@ -51,7 +51,9 @@ Copy `inventory.example.yml` → `inventory.yml` and fill out values.
 
 ### Step 4: Ansible Ping (Local)
 
-Verify Ansible can reach everything before running any playbooks using the following command (**all ansible commands should be run from this repo's root directory**):
+First join your local device to the **fabmans** Wi-Fi network.
+
+Then, verify Ansible can reach the server and all kiosks before running any playbooks using the following command (**all ansible commands should be run from this repo's root directory**):
 
 ```bash
 ansible all -m ping
