@@ -1,0 +1,33 @@
+// SHOULD BE MANUALLY APPLIED BY PASTING INTO: Tailscale Admin Console >> Access Controls >> JSON Editor
+{
+  "tagOwners": {
+    "tag:ms-server": ["autogroup:admin"],
+    "tag:ms-kiosk":  ["autogroup:admin"],
+  },
+
+  "acls": [
+    // Personal devices can reach each other
+    {"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self:*"]},
+
+    // Personal devices can reach all makerspace devices
+    {"action": "accept", "src": ["autogroup:member"], "dst": ["tag:ms-server:*", "tag:ms-kiosk:*"]},
+
+    // Kiosks can only reach the API on the server
+    {"action": "accept", "src": ["tag:ms-kiosk"], "dst": ["tag:ms-server:8000"]},
+
+    // Server can reach the kiosks
+    {"action": "accept", "src": ["tag:ms-server"], "dst": ["tag:ms-kiosk:*"]},
+  ],
+
+  "tests": [
+    {
+      "src":    "tag:ms-kiosk",
+      "accept": ["tag:ms-server:8000"],
+      "deny":   ["tag:ms-server:22", "tag:ms-server:3001", "tag:ms-kiosk:22"],
+    },
+    {
+      "src":    "tag:ms-server",
+      "accept": ["tag:ms-kiosk:22", "tag:ms-kiosk:8001"],
+    },
+  ],
+}

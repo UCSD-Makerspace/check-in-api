@@ -1,14 +1,23 @@
+- import_playbook: choose-connection.yml
+
+
 - name: Deploy check-in-api
   hosts: api_server
   become: true
 
   vars:
     deploy_dir: "/home/{{ ansible_user }}/check-in-api"
+    tailscale_ip: "{{ _tailscale_ip.stdout | trim }}"
 
   tasks:
-    - name: Copy docker-compose.yml
-      copy:
-        src: files/docker-compose-api.yml
+    - name: Look up Tailscale address
+      ansible.builtin.command: tailscale ip -4
+      register: _tailscale_ip
+      changed_when: false
+
+    - name: Write docker-compose.yml
+      ansible.builtin.template:
+        src: templates/docker-compose-api.yml.j2
         dest: "{{ deploy_dir }}/docker-compose.yml"
         mode: "0644"
         owner: "{{ ansible_user }}"
@@ -16,9 +25,9 @@
       register: compose_file
 
     - name: Pull and restart stack
-      shell: docker compose pull && docker compose up -d
-      args:
-        chdir: "{{ deploy_dir }}"
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
       become_user: "{{ ansible_user }}"
       when: compose_file.changed
 
@@ -31,7 +40,7 @@
 
   tasks:
     - name: Copy docker-compose.yml
-      copy:
+      ansible.builtin.copy:
         src: files/docker-compose-kiosk.yml
         dest: "{{ deploy_dir }}/docker-compose.yml"
         mode: "0644"
@@ -40,8 +49,8 @@
       register: compose_file
 
     - name: Pull and restart stack
-      shell: docker compose pull && docker compose up -d
-      args:
-        chdir: "{{ deploy_dir }}"
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
       become_user: "{{ ansible_user }}"
       when: compose_file.changed

@@ -1,0 +1,369 @@
+- import_playbook: choose-connection.yml
+
+
+- name: Harden SSH
+  hosts: all
+  become: true
+
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
+
+  tasks:
+    - name: Add authorized SSH keys
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', playbook_dir + '/files/ssh-keys.conf') }}"
+        exclusive: false
+
+    - name: Disable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+      notify: Restart SSH
+
+
+- name: Install Docker
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - htop
+          - vim
+        state: present
+        update_cache: true
+
+    - name: Install Docker
+      ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
+      args:
+        creates: /usr/bin/docker
+
+    - name: Add {{ ansible_user }} to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Daily Docker image cleanup at midnight
+      ansible.builtin.cron:
+        name: docker image prune
+        minute: "0"
+        hour: "0"
+        job: "docker image prune -f"
+      become_user: "{{ ansible_user }}"
+
+
+- name: Install Tailscale and join the tailnet
+  hosts: all
+  become: true
+
+  vars:
+    tailscale_auth_key: "{{ tailscale_server_auth_key if inventory_hostname in groups['api_server'] else tailscale_kiosk_auth_key }}"
+
+  tasks:
+    - name: Install Tailscale
+      ansible.builtin.shell: curl -fsSL https://tailscale.com/install.sh | sh
+      args:
+        creates: /usr/bin/tailscale
+
+    - name: Enable and start tailscaled
+      ansible.builtin.systemd:
+        name: tailscaled
+        enabled: true
+        state: started
+
+    - name: Check Tailscale login state
+      ansible.builtin.command: tailscale status --json
+      register: _ts_status
+      changed_when: false
+      failed_when: false
+
+    - name: Join tailnet
+      ansible.builtin.command: tailscale up --auth-key={{ tailscale_auth_key }} --hostname={{ inventory_hostname }}
+      when: ((_ts_status.stdout or '{}') | from_json).get('BackendState') != 'Running'
+      no_log: true
+
+    - name: Switch the rest of the run to Tailscale
+      when: connected_over_lan | default(false)
+      block:
+        - name: Read SSH host key
+          ansible.builtin.slurp:
+            src: /etc/ssh/ssh_host_ed25519_key.pub
+          register: _host_key
+
+        # this runs on localhost and copies the already trusted key to the new tailscale ip
+        - name: Trust SSH host key under the Tailscale name
+          ansible.builtin.known_hosts:
+            name: "{{ inventory_hostname }}"
+            key: "{{ inventory_hostname }} {{ (_host_key.content | b64decode).split()[:2] | join(' ') }}"
+          delegate_to: localhost
+          become: false
+          throttle: 1
+
+        - name: Wait until reachable over Tailscale
+          ansible.builtin.wait_for:
+            host: "{{ inventory_hostname }}"
+            port: 22
+            timeout: 60
+          delegate_to: localhost
+          become: false
+
+        - name: Connect over Tailscale from now on
+          ansible.builtin.set_fact:
+            ansible_host: "{{ inventory_hostname }}"
+            connected_over_lan: false
+
+
+- name: Configure kiosk display and power settings
+  hosts: kiosks
+  become: true
+
+  handlers:
+    - name: Update dconf
+      ansible.builtin.command: dconf update
+
+  tasks:
+    - name: Ensure dconf directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /etc/dconf/db/local.d
+        - /etc/dconf/profile
+
+    - name: Create dconf user profile
+      ansible.builtin.copy:
+        src: files/dconf/profile-user
+        dest: /etc/dconf/profile/user
+        mode: "0644"
+      notify: Update dconf
+
+    - name: Disable sleep and screen lock via dconf
+      ansible.builtin.copy:
+        src: files/dconf/01-kiosk-power
+        dest: /etc/dconf/db/local.d/01-kiosk-power
+        mode: "0644"
+      notify: Update dconf
+
+    - name: Install Block Caribou extension
+      ansible.builtin.copy:
+        src: "files/block-caribou-36/"
+        dest: /usr/share/gnome-shell/extensions/block-caribou-36@lxylxy123456.ercli.dev/
+        mode: "0644"
+        directory_mode: "0755"
+
+    - name: Enable Block Caribou extension via dconf
+      ansible.builtin.copy:
+        src: files/dconf/02-kiosk-extensions
+        dest: /etc/dconf/db/local.d/02-kiosk-extensions
+        mode: "0644"
+      notify: Update dconf
+
+    - name: Configure GDM automatic login and disable Wayland
+      ansible.builtin.lineinfile:
+        path: /etc/gdm3/custom.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        insertafter: "\\[daemon\\]"
+      loop:
+        - { regexp: "^#?AutomaticLoginEnable", line: "AutomaticLoginEnable=true" }
+        - { regexp: "^#?AutomaticLogin=", line: "AutomaticLogin={{ ansible_user }}" }
+        - { regexp: "^#?WaylandEnable", line: "WaylandEnable=false" }
+
+    - name: Ensure autostart directory exists
+      ansible.builtin.file:
+        path: /home/{{ ansible_user }}/.config/autostart
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Allow local X11 connections for Docker containers
+      ansible.builtin.copy:
+        src: files/xhost-docker.desktop
+        dest: /home/{{ ansible_user }}/.config/autostart/xhost-docker.desktop
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+
+
+- name: Deploy check-in-api
+  hosts: api_server
+  become: true
+
+  vars:
+    deploy_dir: "/home/{{ ansible_user }}/check-in-api"
+
+  handlers:
+    - name: Apply sysctl settings
+      ansible.builtin.command: sysctl --system
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+  tasks:
+    - name: Allow binding to addresses that are not up yet
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-nonlocal-bind.conf
+        content: |
+          net.ipv4.ip_nonlocal_bind = 1
+        mode: "0644"
+      notify: Apply sysctl settings
+
+    - name: Ensure Docker systemd drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure Docker to start after Tailscale
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/docker.service.d/tailscale-online.conf
+        content: |
+          [Unit]
+          After=tailscaled.service
+          Wants=tailscaled.service
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Look up Tailscale address
+      ansible.builtin.command: tailscale ip -4
+      register: _tailscale_ip
+      changed_when: false
+
+    - name: Store Tailscale address
+      ansible.builtin.set_fact:
+        tailscale_ip: "{{ _tailscale_ip.stdout | trim }}"
+
+    - name: Ensure deployment directory exists
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Write docker-compose.yml
+      ansible.builtin.template:
+        src: templates/docker-compose-api.yml.j2
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Write .env file
+      ansible.builtin.template:
+        src: templates/env.j2
+        dest: "{{ deploy_dir }}/.env"
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      no_log: true
+
+    - name: Copy Google credentials
+      ansible.builtin.copy:
+        src: "{{ google_credentials_path }}"
+        dest: "{{ deploy_dir }}/google-sheets-service-account.json"
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      no_log: true
+
+    - name: Apply pending system changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Pull latest images and start stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
+      become_user: "{{ ansible_user }}"
+
+
+- name: Deploy check-in kiosk
+  hosts: kiosks
+  become: true
+
+  vars:
+    deploy_dir: "/home/{{ ansible_user }}/check-in"
+
+  tasks:
+    - name: Ensure deployment directory exists
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy docker-compose.yml
+      ansible.builtin.copy:
+        src: files/docker-compose-kiosk.yml
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Write .env file
+      ansible.builtin.template:
+        src: templates/kiosk-env.j2
+        dest: "{{ deploy_dir }}/.env"
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      no_log: true
+
+    - name: Start check-in stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+      become_user: "{{ ansible_user }}"
+
+
+- name: Only accept inbound traffic over Tailscale
+  hosts: all
+  become: true
+
+  tasks:
+    # Enabling the firewall while connected over the LAN would lock Ansible out
+    - name: Refuse to enable firewall over the LAN
+      ansible.builtin.assert:
+        that: not (connected_over_lan | default(false))
+        fail_msg: "Still connected over the LAN, not Tailscale. Not enabling the firewall."
+
+    - name: Allow all traffic arriving over Tailscale
+      community.general.ufw:
+        rule: allow
+        direction: in
+        interface: tailscale0
+
+    - name: Allow Tailscale direct connections
+      community.general.ufw:
+        rule: allow
+        port: "41641"
+        proto: udp
+
+    - name: Deny all other inbound traffic
+      community.general.ufw:
+        direction: incoming
+        policy: deny
+
+    - name: Enable firewall
+      community.general.ufw:
+        state: enabled
+
+
+- name: Reboot kiosks
+  hosts: kiosks
+  become: true
+
+  tasks:
+    - name: Reboot
+      ansible.builtin.reboot:

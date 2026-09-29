@@ -1,0 +1,19 @@
+- name: Connect over Tailscale, falling back to the LAN
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Check whether host is reachable over Tailscale
+      ansible.builtin.wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22
+        timeout: 3
+      delegate_to: localhost
+      register: _tailscale_check
+      ignore_errors: true
+
+    - name: Fall back to LAN address
+      ansible.builtin.set_fact:
+        ansible_host: "{{ lan_ip }}"
+        connected_over_lan: true
+      when: _tailscale_check is failed

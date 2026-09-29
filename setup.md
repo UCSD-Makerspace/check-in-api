@@ -2,6 +2,8 @@
 
 In order to increase the repeatability of the setup, the entire process is outlined here and 90% of it will be completed by automatic (and at least semi-idempotent) Ansible scripts. This setup assumes that the server is being installed to an x86 computer, and that the kiosks are being installed to Raspberry Pi Keyboards. The scripts and application could be adjusted to work with other setups but would require some modification.
 
+**IMPORTANT NOTE:** The setup currently requires Tailscale to function. As this is likely an ephemeral part of the system as I await having a functional public ip & port to run Netbird off of these docs will fail to mention the tailscale dashboard + token + local prereq steps needed for setup.
+
 ## Prerequisites (local machine)
 
 - [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/)
@@ -10,60 +12,63 @@ In order to increase the repeatability of the setup, the entire process is outli
 
 ## Instructions
 
-### Step 1: Setup Server (Local + Server)
+### Step 1: Initial Setup
 
-Install **Ubuntu Server 24.04** on with the user `makeradmin` and the hostname `ms-server`. Ensure the server is connectable via SSH and that sudoing does not require a password (likely all default, unlike for the client in step 2).
+#### Server:
 
-### Step 2: Setup Kiosks (Local + Kiosk)
+1. Install **Ubuntu Server 24.04** with the user `makeradmin` and the hostname `ms-server`.
+   1. Ensure the server is connectable via SSH and that sudoing does not require a password (likely all default, unlike for the client in step 2).
+2. Connect to **UCSD-DEVICE** Wi-Fi.
 
-#### Install Ubuntu Desktop 24.04
+#### Kiosk:
 
-Install **Ubuntu Desktop 24.04** on the Pi Keyboard using **Raspberry Pi Imager** with the following config options:
-* Name: `John Makerspace`
-* Computer's Name: `ms-kiosk-x` (where x is the kiosk number)
-* Username: `makeradmin`
-* `Log in automatically` (shouldn't matter which option is selected here because the Ansible script should enable automatic logins anyway though)
+1. Install **Ubuntu Desktop 24.04** on the Pi Keyboard using **Raspberry Pi Imager** with the following config options:
+  - Name: `John Makerspace`
+  - Computer's Name: `ms-kiosk-x` (where x is the kiosk number)
+  - Username: `makeradmin`
+  - `Log in automatically` (shouldn't matter which option is selected here because the Ansible script should enable automatic logins anyway though)
 
-#### Connect to Wi-Fi
+2. Connect to **UCSD-DEVICE** Wi-Fi.
 
-Connect to **fabmans** with the correct password (intentionally omitted).
-
-#### Enable SSH
+3. **Install SSH:**
 
 ```bash
 sudo apt install openssh-server
 ```
 
-#### Allow Passwordless sudo
+4. **Allow Passwordless sudo:**
 
 ```bash
 echo "makeradmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/makeradmin
 ```
 
-#### Add Local SSH Key to Kiosk
+5. **Add Local SSH Key to Kiosk:**
 ```bash
 ssh-copy-id makeradmin@<kiosk_ip>
 ```
 
-### Step 3: Configure Ansible Inventory (Local)
+### Step 2: Setup Ansible Secrets
 
-Copy `inventory.example.yml` → `inventory.yml` and fill out values.
+Copy `secrets.example.yml` → `secrets.yml` into the makerspace inventory and fill in the secrets.
 
-### Step 4: Ansible Ping (Local)
+Run the following command to encrypt the secrets:
+```bash
+ansible-vault encrypt secrets.yml
+```
 
-First join your local device to the **fabmans** Wi-Fi network.
+### Step 3: Check Connection
 
-Then, verify Ansible can reach the server and all kiosks before running any playbooks using the following command (**all ansible commands should be run from this repo's root directory**):
+First join your local device to the **UCSD-DEVICE** Wi-Fi network.
+
+Then, verify Ansible can reach the server and all kiosks before running any playbooks using the following command (**all ansible commands should be run from the ansible/ directory**):
 
 ```bash
-ansible all -m ping
+ansible all -m ping -e 'ansible_host={{ lan_ip }}'
 ```
 
 Note: Ansible will be unable to ping any server which you have not SSH'ed into at least once first to confirm the fingerprint, make sure you have done this.
 
-
-
-### Step 5: Run unattended-upgrade (Server + Kiosk)
+### Step 4: Run unattended-upgrade (Server + Kiosk)
 
 Unattended upgrade will likely hold the package lock for a substantial period of time on its first run, so if installing the check-in system shortly after installing the OS, it is best to run this manually and wait for its completion.
 
@@ -71,75 +76,8 @@ Unattended upgrade will likely hold the package lock for a substantial period of
 sudo apt update && sudo unattended-upgrade -v
 ```
 
-### Step 6: Setup Server (Local)
-
-Run the ansible playbook to set the server up (Docker install, SSH hardening):
-```bash
-ansible-playbook ansible/1-setup-server.yml
-```
-
-### Step 7: Setup Kiosks (Local)
-
-Run the ansible playbook to set the kiosks up (Docker install, system settings, SSH hardening):
-```bash
-ansible-playbook ansible/2-setup-kiosks.yml
-```
-
-### Step 8 (Optional): Set Up Local WireGuard Client (Local)
-
-Generate a WireGuard key pair for your machine and add a `[Peer]` block to `ansible/files/wireguard-peers.conf` with your public key and a unique unused IP in the `10.8.0.0/24` range:
-
-```ini
-# your name
-[Peer]
-PublicKey = <LOCAL_WIREGUARD_PUBLIC_KEY>
-AllowedIPs = <LOCAL_WIREGUARD_IP>/32
-```
-
-After running the WireGuard ansible script, finish setting up your client's config. Here's an example config of what it might look like after setup:
-
-```ini
-[Interface]
-PrivateKey = <LOCAL_WIREGUARD_PRIVATE_KEY>
-Address = <LOCAL_WIREGUARD_IP>/24
-
-[Peer]
-PublicKey = <SERVER_WIREGUARD_PUBLIC_KEY>
-AllowedIPs = 10.8.0.1/32
-Endpoint = <SERVER_IP>:51820
-PersistentKeepalive = 25
-
-```
-
-### Step 9: Setup WireGuard (Local)
+### Step 5: Run Ansible
 
 ```bash
-ansible-playbook ansible/3-setup-wireguard.yml
-```
-
-Run the ansible playbook to connect the server and kiosks via WireGuard. Create your WireGuard config using the key printed at the end as SERVER_PUBLIC_KEY:
-```ini
-[Interface]
-PrivateKey = <LOCAL_WIREGUARD_PRIVATE_KEY>
-Address = <LOCAL_WIREGUARD_IP>/24
-
-[Peer]
-PublicKey = <SERVER_WIREGUARD_PUBLIC_KEY>
-AllowedIPs = 10.8.0.1/32
-Endpoint = <SERVER_PUBLIC_IP>:51820
-PersistentKeepalive = 25
-```
-
-### Step 10: Load Secrets (Local)
-
-Copy `secrets.example.yml` → `secrets.yml` and fill in the secrets.
-
-Run the following command to encrypt the secrets:
-```bash
-ansible-vault encrypt secrets.yml
-```
-
-Then use the following ansible playbook to copy them to the server and start the stack:
-```bash
-ansible-playbook ansible/4-load-secrets.yml --ask-vault-pass
+ansible-playbook setup.yml --ask-vault-pass
 ```

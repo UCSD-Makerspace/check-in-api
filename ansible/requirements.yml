@@ -1,0 +1,8 @@
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: ansible.posix
+    version: 2.1.0
+  - name: community.docker
+    version: 5.0.4
+  - name: community.general
+    version: 12.1.0
