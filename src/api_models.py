@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import re
 from enum import Enum
 
-from pydantic import BaseModel, TypeAdapter, model_validator
+from pydantic import BaseModel, TypeAdapter, field_validator, model_validator
 
 """
 IT SHOULD BE ENSURED ANY UPDATES TO THIS FILE ARE ALSO MADE AT THE CORRESPONDING LOCATIONS:
  - Check-In/src/misc/api_models.py
  - check-in-api/src/api_models.py
 """
+
+
+UCSD_EMAIL_DOMAIN = "@ucsd.edu"
+_UCSD_EMAIL = re.compile(r"[^@\s]+" + re.escape(UCSD_EMAIL_DOMAIN))
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -48,6 +54,21 @@ class AccountRequest(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     email: str | None = None
+
+    @field_validator("first_name", "last_name", "email")
+    @classmethod
+    def strip_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("email")
+    @classmethod
+    def check_ucsd_email(cls, value: str | None) -> str | None:
+        if not value:
+            return value
+        value = value.lower()
+        if not _UCSD_EMAIL.fullmatch(value):
+            raise ValueError(f"email must be a {UCSD_EMAIL_DOMAIN} address")
+        return value
 
     @model_validator(mode="after")
     def check_inputs(self) -> AccountRequest:
