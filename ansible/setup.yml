@@ -60,6 +60,81 @@
       become_user: "{{ ansible_user }}"
 
 
+# hopefully addresses an issue where the server dropped off wifi and auto reconnect failed
+- name: wifi reconnect script
+  hosts: all
+  become: true
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+  tasks:
+    - name: Install Wi-Fi watchdog
+      when: wifi_connection | default('') | length > 0
+      block:
+        - name: Install Wi-Fi watchdog script
+          ansible.builtin.copy:
+            dest: /usr/local/bin/wifi-watchdog
+            content: |
+              #!/bin/sh
+              connection_is_up() {
+                state=$(nmcli -g GENERAL.STATE connection show "$1" 2>/dev/null)
+                [ "$state" = "activated" ] || [ "$state" = "activating" ]
+              }
+
+              connection_is_up "$1" && exit 0
+
+              # Give NetworkManager a chance to reconnect on its own first
+              sleep 30
+              connection_is_up "$1" && exit 0
+
+              logger -t wifi-watchdog "$1 is down, reconnecting"
+              nmcli --wait 60 connection up "$1"
+            mode: "0755"
+
+        - name: Install Wi-Fi watchdog service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/wifi-watchdog.service
+            content: |
+              [Unit]
+              Description=Reconnect Wi-Fi if NetworkManager has given up
+              After=NetworkManager.service
+
+              [Service]
+              Type=oneshot
+              ExecStart=/usr/local/bin/wifi-watchdog "{{ wifi_connection }}"
+            mode: "0644"
+          notify: Reload systemd
+
+        - name: Install Wi-Fi watchdog timer
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/wifi-watchdog.timer
+            content: |
+              [Unit]
+              Description=Check Wi-Fi every minute
+
+              [Timer]
+              OnBootSec=2min
+              OnUnitActiveSec=1min
+
+              [Install]
+              WantedBy=timers.target
+            mode: "0644"
+          notify: Reload systemd
+
+    - name: Apply pending system changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable and start Wi-Fi watchdog timer
+      ansible.builtin.systemd:
+        name: wifi-watchdog.timer
+        enabled: true
+        state: started
+      when: wifi_connection | default('') | length > 0
+
+
 - name: Install Tailscale and join the tailnet
   hosts: all
   become: true

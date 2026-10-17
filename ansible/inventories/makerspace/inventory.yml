@@ -1,4 +1,7 @@
 all:
+  vars:
+    wifi_connection: UCSD-DEVICE
+
   children:
     api_server:
       hosts:
