@@ -1,0 +1,33 @@
+services:
+  mediawiki:
+    build:
+      context: ./build
+      pull: true
+    image: ms-mediawiki
+    container_name: mediawiki
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    volumes:
+      - ./images:/var/www/html/images
+      - ./LocalSettings.php:/var/www/html/LocalSettings.php:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  mariadb:
+    image: mariadb:12.3
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: "{{ mariadb_password }}"
+      MARIADB_DATABASE: wiki
+    volumes:
+      - ./mariadb:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+

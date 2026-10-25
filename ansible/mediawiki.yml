@@ -1,0 +1,95 @@
+- name: deploy mediawiki
+  hosts: david
+  become: true
+  vars:
+    deploy_dir: /root/mediawiki
+    mediawiki_config_dir: "{{ query('community.general.filetree', playbook_dir ~ '/templates/mediawiki/') }}"
+  tasks:
+    - name: add docker repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/ubuntu
+        suites: "{{ ansible_distribution_release }}"
+        components: stable
+        signed_by: https://download.docker.com/linux/ubuntu/gpg
+
+    - name: install docker compose
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: start docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: ensure mediawiki directory exists
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "700"
+
+    - name: ensure images directory exists
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/images"
+        state: directory
+        owner: "33"
+        group: "33"
+        mode: "700"
+
+    - name: ensure mariadb directory exists
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/mariadb"
+        state: directory
+        mode: "755"
+
+    - name: create directories
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/{{ item.path }}"
+        state: directory
+        mode: "755"
+      loop: "{{ mediawiki_config_dir | selectattr('state', 'eq', 'directory') }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: write static files
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ deploy_dir }}/{{ item.path }}"
+        mode: "644"
+      loop: "{{ mediawiki_config_dir | selectattr('state', 'eq', 'file') | rejectattr('path', 'search', '[.]j2$') }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: restart mediawiki
+
+    - name: write template files
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ deploy_dir }}/{{ item.path | regex_replace('[.]j2$', '') }}"
+        mode: "644"
+      loop: "{{ mediawiki_config_dir | selectattr('state', 'eq', 'file') | selectattr('path', 'search', '[.]j2$') }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: restart mediawiki
+
+    - name: start compose stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        state: present
+        build: always
+
+  handlers:
+    - name: restart mediawiki
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        services:
+          - mediawiki
+        state: restarted

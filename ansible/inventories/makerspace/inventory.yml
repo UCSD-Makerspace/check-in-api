@@ -1,4 +1,8 @@
 all:
+  hosts:
+    david:
+      ansible_host: pictor.ucsd.edu
+      ansible_user: timothy
   vars:
     wifi_connection: UCSD-DEVICE
 
