@@ -37,6 +37,14 @@ def get_account_by_pid(pid: str) -> StudentResponse:
     return StudentResponse(student=ucsd.to_student(student))
 
 
+@router.get("/accounts/email/{email}")
+def get_account_by_email(email: str) -> StudentResponse:
+    user = cache.get_user_by_email(email)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return StudentResponse(student=cache.to_student(user))
+
+
 @router.get("/accounts/barcode/{barcode}")
 def get_account_by_barcode(barcode: str) -> StudentResponse:
     student = ucsd.fetch_student_by_barcode(barcode)
